@@ -17,6 +17,24 @@ const emit = defineEmits<{
 }>();
 
 const panelRef = ref<HTMLElement | null>(null);
+const previewRef = ref<HTMLElement | null>(null);
+
+// 浮動預覽框狀態
+const previewState = ref<{
+  visible: boolean;
+  x: number;
+  y: number;
+  project: {
+    title: string;
+    description?: string;
+    image?: string;
+  } | null;
+}>({
+  visible: false,
+  x: 0,
+  y: 0,
+  project: null,
+});
 
 // 當內容變化時，播放動畫
 watch(
@@ -60,6 +78,19 @@ watch(
         },
       });
     }
+    // 內容變化時隱藏預覽卡片
+    hidePreview();
+  }
+);
+
+// 監聽面板可見性變化
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (!newVal) {
+      // 面板隱藏時，隱藏預覽卡片
+      hidePreview();
+    }
   }
 );
 
@@ -69,25 +100,252 @@ const handleClose = () => {
 
 // 處理連結點擊
 const handleLinkClick = (
-  link: { label: string; url: string },
+  link: { id?: string; label: string; url: string },
   event: MouseEvent
 ) => {
-  // 如果是「查看更多」按鈕，切換到下一個面板
-  if (link.label === "查看更多") {
-    event.preventDefault();
-    emit("next");
+  // 使用 id 來判斷導航邏輯，而不是 label
+  if (!link.id) {
+    // 如果沒有 id，保持原有行為（跳轉）
+    return;
   }
-  // 如果是「查看工作經歷」按鈕，導航到工作經驗（mars）
-  else if (link.label === "查看工作經歷") {
-    event.preventDefault();
-    emit("navigateTo", "mars");
+
+  // 根據 id 進行導航
+  switch (link.id) {
+    case "view-skills":
+      // 切換到下一個面板（技能專長）
+      event.preventDefault();
+      emit("next");
+      break;
+    case "view-experience":
+      // 導航到工作經驗（mars）
+      event.preventDefault();
+      emit("navigateTo", "mars");
+      break;
+    case "view-portfolio":
+      // 導航到作品展示（saturn）
+      event.preventDefault();
+      emit("navigateTo", "saturn");
+      break;
+    case "view-contact":
+      // 導航到聯絡資訊（contact）
+      event.preventDefault();
+      emit("navigateTo", "contact");
+      break;
+    default:
+      // 其他連結（如外部連結）保持原有行為（跳轉）
+      break;
   }
-  // 如果是「查看作品集」或「查看所有作品」按鈕，導航到作品展示（saturn）
-  else if (link.label === "查看作品集" || link.label === "查看所有作品") {
-    event.preventDefault();
-    emit("navigateTo", "saturn");
+};
+
+// 處理作品項目 hover 效果
+const handleProjectHover = (event: MouseEvent, index: number) => {
+  if (!props.content?.projects) return;
+
+  const project = props.content.projects[index];
+  if (!project) return;
+
+  // 計算初始位置（稍微偏移，避免遮擋滑鼠）
+  const offsetX = 30;
+  const offsetY = 30;
+  let targetX = event.clientX + offsetX;
+  let targetY = event.clientY + offsetY;
+
+  // 顯示預覽框
+  previewState.value = {
+    visible: true,
+    x: targetX,
+    y: targetY,
+    project: {
+      title: project.title,
+      description: project.description,
+      image: project.image,
+    },
+  };
+
+  // 使用 GSAP 動畫顯示
+  if (previewRef.value) {
+    // 先設置位置（使用 left 和 top）
+    gsap.set(previewRef.value, {
+      left: targetX,
+      top: targetY,
+      xPercent: -50,
+      yPercent: -50,
+    });
+
+    // 然後動畫顯示
+    gsap.fromTo(
+      previewRef.value,
+      {
+        opacity: 0,
+        scale: 0.8,
+      },
+      {
+        opacity: 1,
+        scale: 1,
+        duration: 0.3,
+        ease: "power2.out",
+      }
+    );
   }
-  // 其他連結保持原有行為（跳轉）
+};
+
+const handleProjectLeave = (event: MouseEvent) => {
+  // 檢查滑鼠是否移動到預覽框上
+  if (previewRef.value) {
+    const card = previewRef.value.querySelector(".preview-card") as HTMLElement;
+    if (card) {
+      const rect = card.getBoundingClientRect();
+      const x = event.clientX;
+      const y = event.clientY;
+
+      // 如果滑鼠在預覽框範圍內，不隱藏
+      if (
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      ) {
+        return;
+      }
+    }
+  }
+
+  // 隱藏預覽框
+  hidePreview();
+};
+
+// 隱藏預覽框的函數
+const hidePreview = () => {
+  if (previewRef.value) {
+    const card = previewRef.value.querySelector(".preview-card") as HTMLElement;
+    // 先重置卡片位置
+    if (card) {
+      gsap.to(card, {
+        x: 0,
+        y: 0,
+        rotateX: 0,
+        rotateY: 0,
+        duration: 0.2,
+        ease: "power2.out",
+      });
+    }
+
+    // 然後隱藏預覽框
+    gsap.to(previewRef.value, {
+      opacity: 0,
+      scale: 0.8,
+      duration: 0.2,
+      ease: "power2.in",
+      onComplete: () => {
+        previewState.value.visible = false;
+        previewState.value.project = null;
+      },
+    });
+  } else {
+    previewState.value.visible = false;
+    previewState.value.project = null;
+  }
+};
+
+const handleProjectMove = (event: MouseEvent) => {
+  if (!previewState.value.visible || !previewRef.value) return;
+
+  // 檢查滑鼠是否在預覽框上，如果是則不更新位置
+  const card = previewRef.value.querySelector(".preview-card") as HTMLElement;
+  if (card) {
+    const cardRect = card.getBoundingClientRect();
+    if (
+      event.clientX >= cardRect.left &&
+      event.clientX <= cardRect.right &&
+      event.clientY >= cardRect.top &&
+      event.clientY <= cardRect.bottom
+    ) {
+      return; // 滑鼠在卡片上，不更新位置
+    }
+  }
+
+  // 更新預覽框位置（稍微偏移，避免遮擋滑鼠）
+  const offsetX = 30;
+  const offsetY = 30;
+
+  let targetX = event.clientX + offsetX;
+  let targetY = event.clientY + offsetY;
+
+  // 確保預覽框不會超出視窗邊界
+  const previewWidth = 320; // w-80 = 320px
+  const previewHeight = 300; // 估算高度
+
+  if (targetX + previewWidth / 2 > window.innerWidth) {
+    targetX = event.clientX - offsetX - previewWidth / 2;
+  }
+  if (targetY + previewHeight / 2 > window.innerHeight) {
+    targetY = event.clientY - offsetY - previewHeight / 2;
+  }
+  if (targetX - previewWidth / 2 < 0) {
+    targetX = previewWidth / 2;
+  }
+  if (targetY - previewHeight / 2 < 0) {
+    targetY = previewHeight / 2;
+  }
+
+  previewState.value.x = targetX;
+  previewState.value.y = targetY;
+
+  // 使用 GSAP 平滑移動（更快的響應速度）
+  gsap.to(previewRef.value, {
+    left: targetX,
+    top: targetY,
+    duration: 0.2,
+    ease: "power1.out",
+  });
+};
+
+// 處理預覽框內的滑鼠移動（3D 浮動效果）
+const handlePreviewEnter = () => {
+  // 滑鼠進入預覽框時，啟用浮動效果
+};
+
+const handlePreviewLeave = () => {
+  // 滑鼠離開預覽框時，隱藏卡片
+  hidePreview();
+};
+
+const handlePreviewMove = (event: MouseEvent) => {
+  if (!previewRef.value) return;
+
+  const card = previewRef.value.querySelector(".preview-card") as HTMLElement;
+  if (!card) return;
+
+  const rect = card.getBoundingClientRect();
+  const cardCenterX = rect.left + rect.width / 2;
+  const cardCenterY = rect.top + rect.height / 2;
+
+  // 計算滑鼠相對於卡片中心的位置（-1 到 1）
+  const mouseX = event.clientX - cardCenterX;
+  const mouseY = event.clientY - cardCenterY;
+
+  const relativeX = mouseX / (rect.width / 2);
+  const relativeY = mouseY / (rect.height / 2);
+
+  // 計算浮動效果（最大移動 15px，最大旋轉 5 度）
+  const maxMove = 15;
+  const maxRotate = 5;
+
+  const moveX = relativeX * maxMove;
+  const moveY = relativeY * maxMove;
+  const rotateY = relativeX * maxRotate;
+  const rotateX = -relativeY * maxRotate; // 反向，讓效果更自然
+
+  // 應用 3D 變換
+  gsap.to(card, {
+    x: moveX,
+    y: moveY,
+    rotateX: rotateX,
+    rotateY: rotateY,
+    duration: 0.3,
+    ease: "power1.out",
+    transformPerspective: 1000,
+  });
 };
 </script>
 
@@ -96,7 +354,7 @@ const handleLinkClick = (
     <div
       v-if="visible && content"
       ref="panelRef"
-      class="planet-info-panel fixed w-[420px] max-w-[calc(100vw-2rem)] bg-gradient-to-b from-black/40 via-black/30 to-black/40 backdrop-blur-xl border rounded-3xl shadow-2xl z-50 overflow-visible"
+      class="planet-info-panel fixed w-[calc(100vw-1rem)] sm:w-[420px] max-w-[calc(100vw-2rem)] h-[90vh] max-h-[90vh] bg-gradient-to-b from-black/40 via-black/30 to-black/40 backdrop-blur-xl border rounded-2xl sm:rounded-3xl shadow-2xl z-50 overflow-visible flex flex-col"
       :style="{
         borderColor: content.color
           ? `${content.color}60`
@@ -104,13 +362,16 @@ const handleLinkClick = (
         left: props.position ? `${props.position.x}px` : 'auto',
         top: props.position ? `${props.position.y}px` : 'auto',
         transform: props.position ? 'translate(-50%, -50%)' : 'none',
-        right: props.position ? 'auto' : '2rem',
-        marginTop: props.position ? '0' : '2rem',
+        right: props.position ? 'auto' : 'clamp(0.5rem, 2rem, 2rem)',
+        marginTop: props.position ? '0' : 'clamp(0.5rem, 2rem, 2rem)',
         boxShadow: content.color
           ? `0 20px 60px ${content.color}30, 0 0 40px ${content.color}20`
           : '0 20px 60px rgba(0,0,0,0.5)',
       }"
-      @click.stop>
+      @click.stop
+      @touchstart.stop
+      @touchmove.stop
+      @touchend.stop>
       <!-- 頂部裝飾條 -->
       <div
         class="h-1 w-full"
@@ -123,9 +384,9 @@ const handleLinkClick = (
       <!-- 關閉按鈕 -->
       <button
         @click="handleClose"
-        class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all duration-200 z-10 group">
+        class="absolute top-3 right-3 sm:top-4 sm:right-4 w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 transition-all duration-200 z-10 group">
         <svg
-          class="w-5 h-5 text-white group-hover:rotate-90 transition-transform duration-200"
+          class="w-4 h-4 sm:w-5 sm:h-5 text-white group-hover:rotate-90 transition-transform duration-200"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24">
@@ -138,179 +399,363 @@ const handleLinkClick = (
       </button>
 
       <!-- 內容區域 -->
-      <div class="p-8">
-        <!-- 頭像（如果有） -->
-        <div v-if="content.avatar" class="flex justify-center mb-6">
+      <div class="flex-1 min-h-0 overflow-hidden relative" style="height: 0">
+        <div
+          class="p-4 sm:p-6 md:p-8 scroll-container"
+          style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+            overscroll-behavior: contain;
+          "
+          @touchstart.stop
+          @touchmove.stop
+          @touchend.stop>
+          <!-- 頭像（如果有） -->
+          <div v-if="content.avatar" class="flex justify-center mb-4 sm:mb-6">
+            <div
+              class="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-4"
+              :style="{
+                borderColor: content.color || 'rgba(255,255,255,0.3)',
+                boxShadow: content.color
+                  ? `0 0 30px ${content.color}50, inset 0 0 20px ${content.color}20`
+                  : '0 0 30px rgba(255,255,255,0.2)',
+              }">
+              <img
+                :src="content.avatar"
+                :alt="content.title"
+                class="w-full h-full object-cover" />
+              <!-- 發光效果 -->
+              <div
+                class="absolute inset-0 rounded-full pointer-events-none"
+                :style="{
+                  boxShadow: content.color
+                    ? `inset 0 0 20px ${content.color}30`
+                    : 'inset 0 0 20px rgba(255,255,255,0.1)',
+                }"></div>
+            </div>
+          </div>
+
+          <!-- 標題區域 -->
+          <div class="text-center mb-4 sm:mb-6">
+            <h2
+              class="text-2xl sm:text-3xl font-bold mb-2 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent"
+              :style="{
+                backgroundImage: content.color
+                  ? `linear-gradient(135deg, ${content.color}, ${content.color}cc)`
+                  : 'linear-gradient(135deg, #fff, #ccc)',
+              }">
+              {{ content.title }}
+            </h2>
+            <p
+              v-if="content.subtitle"
+              class="text-gray-400 text-xs sm:text-sm uppercase tracking-wider">
+              {{ content.subtitle }}
+            </p>
+          </div>
+
+          <!-- 描述 -->
+          <p
+            class="text-gray-300 mb-4 sm:mb-6 leading-relaxed text-xs sm:text-sm whitespace-pre-line">
+            {{ content.description }}
+          </p>
+
+          <!-- 勵志名言（如果有） -->
           <div
-            class="relative w-24 h-24 rounded-full overflow-hidden border-4"
+            v-if="content.quote"
+            class="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl border-l-4"
             :style="{
               borderColor: content.color || 'rgba(255,255,255,0.3)',
-              boxShadow: content.color
-                ? `0 0 30px ${content.color}50, inset 0 0 20px ${content.color}20`
-                : '0 0 30px rgba(255,255,255,0.2)',
+              backgroundColor: content.color
+                ? `${content.color}10`
+                : 'rgba(255,255,255,0.05)',
             }">
-            <img
-              :src="content.avatar"
-              :alt="content.title"
-              class="w-full h-full object-cover" />
-            <!-- 發光效果 -->
-            <div
-              class="absolute inset-0 rounded-full pointer-events-none"
-              :style="{
-                boxShadow: content.color
-                  ? `inset 0 0 20px ${content.color}30`
-                  : 'inset 0 0 20px rgba(255,255,255,0.1)',
-              }"></div>
+            <p class="text-white/90 italic text-center text-xs sm:text-sm">
+              "{{ content.quote }}"
+            </p>
           </div>
-        </div>
 
-        <!-- 標題區域 -->
-        <div class="text-center mb-6">
-          <h2
-            class="text-3xl font-bold mb-2 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent"
-            :style="{
-              backgroundImage: content.color
-                ? `linear-gradient(135deg, ${content.color}, ${content.color}cc)`
-                : 'linear-gradient(135deg, #fff, #ccc)',
-            }">
-            {{ content.title }}
-          </h2>
-          <p
-            v-if="content.subtitle"
-            class="text-gray-400 text-sm uppercase tracking-wider">
-            {{ content.subtitle }}
-          </p>
-        </div>
-
-        <!-- 描述 -->
-        <p class="text-gray-300 mb-6 leading-relaxed text-sm">
-          {{ content.description }}
-        </p>
-
-        <!-- 勵志名言（如果有） -->
-        <div
-          v-if="content.quote"
-          class="mb-6 p-4 rounded-xl border-l-4"
-          :style="{
-            borderColor: content.color || 'rgba(255,255,255,0.3)',
-            backgroundColor: content.color
-              ? `${content.color}10`
-              : 'rgba(255,255,255,0.05)',
-          }">
-          <p class="text-white/90 italic text-center text-sm">
-            "{{ content.quote }}"
-          </p>
-        </div>
-
-        <!-- 詳細資訊 -->
-        <div
-          v-if="content.details && content.details.length > 0"
-          class="mb-6 space-y-3">
+          <!-- 詳細資訊 -->
           <div
-            v-for="(detail, index) in content.details"
-            :key="index"
-            class="flex justify-between items-center py-2 px-3 rounded-lg border"
-            :style="{
-              borderColor: content.color
-                ? `${content.color}30`
-                : 'rgba(255,255,255,0.1)',
-              backgroundColor: content.color
-                ? `${content.color}05`
-                : 'rgba(255,255,255,0.02)',
-            }">
-            <span class="text-gray-400 text-xs">{{ detail.label }}</span>
-            <span class="text-white font-medium text-sm">{{
-              detail.value
-            }}</span>
+            v-if="content.details && content.details.length > 0"
+            class="mb-4 sm:mb-6 space-y-2 sm:space-y-3">
+            <div
+              v-for="(detail, index) in content.details"
+              :key="index"
+              class="flex justify-between items-center py-2 px-2 sm:px-3 rounded-lg border"
+              :style="{
+                borderColor: content.color
+                  ? `${content.color}30`
+                  : 'rgba(255,255,255,0.1)',
+                backgroundColor: content.color
+                  ? `${content.color}05`
+                  : 'rgba(255,255,255,0.02)',
+              }">
+              <span class="text-gray-400 text-[10px] sm:text-xs">{{
+                detail.label
+              }}</span>
+              <span class="text-white font-medium text-xs sm:text-sm">{{
+                detail.value
+              }}</span>
+            </div>
+          </div>
+
+          <!-- 我的優勢 -->
+          <div
+            v-if="content.advantages && content.advantages.length > 0"
+            class="mb-4 sm:mb-6">
+            <h3
+              class="text-base sm:text-lg font-semibold mb-2 sm:mb-3 text-white"
+              :style="{
+                color: content.color || '#fff',
+              }">
+              {{ content.id === "contact" ? "我能帶給公司的價值" : "我的優勢" }}
+            </h3>
+            <div class="space-y-2">
+              <div
+                v-for="(advantage, index) in content.advantages"
+                :key="index"
+                class="relative pl-2 sm:pl-3 py-2 rounded-lg border-l-2"
+                :style="{
+                  borderColor: content.color || 'rgba(255,255,255,0.3)',
+                  backgroundColor: content.color
+                    ? `${content.color}08`
+                    : 'rgba(255,255,255,0.03)',
+                }">
+                <p
+                  class="text-gray-300 text-xs sm:text-sm leading-relaxed break-words">
+                  {{ advantage }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 我的核心價值 / 期望條件 -->
+          <div
+            v-if="content.coreValues && content.coreValues.length > 0"
+            class="mb-4 sm:mb-6">
+            <h3
+              class="text-base sm:text-lg font-semibold mb-2 sm:mb-3 text-white"
+              :style="{
+                color: content.color || '#fff',
+              }">
+              {{ content.id === "contact" ? "期望條件" : "我的核心價值" }}
+            </h3>
+            <div class="space-y-2">
+              <div
+                v-for="(value, index) in content.coreValues"
+                :key="index"
+                class="relative pl-2 sm:pl-3 py-2 rounded-lg border-l-2"
+                :style="{
+                  borderColor: content.color || 'rgba(255,255,255,0.3)',
+                  backgroundColor: content.color
+                    ? `${content.color}08`
+                    : 'rgba(255,255,255,0.03)',
+                }">
+                <p
+                  class="text-gray-300 text-xs sm:text-sm leading-relaxed break-words">
+                  {{ value }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 保留原有的 strengths 顯示（向後兼容） -->
+          <div
+            v-if="
+              content.strengths &&
+              content.strengths.length > 0 &&
+              !content.advantages &&
+              !content.coreValues
+            "
+            class="mb-4 sm:mb-6">
+            <h3
+              class="text-base sm:text-lg font-semibold mb-2 sm:mb-3 text-white"
+              :style="{
+                color: content.color || '#fff',
+              }">
+              核心價值與擅長
+            </h3>
+            <div class="space-y-2">
+              <div
+                v-for="(strength, index) in content.strengths"
+                :key="index"
+                class="relative pl-2 sm:pl-3 py-2 rounded-lg border-l-2"
+                :style="{
+                  borderColor: content.color || 'rgba(255,255,255,0.3)',
+                  backgroundColor: content.color
+                    ? `${content.color}08`
+                    : 'rgba(255,255,255,0.03)',
+                }">
+                <p
+                  class="text-gray-300 text-xs sm:text-sm leading-relaxed break-words">
+                  {{ strength }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 作品列表 -->
+          <div
+            v-if="content.projects && content.projects.length > 0"
+            class="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
+            <h3
+              class="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-white"
+              :style="{
+                color: content.color || '#fff',
+              }">
+              精選作品
+            </h3>
+            <div
+              v-for="(project, index) in content.projects"
+              :key="index"
+              class="project-item relative group cursor-grab active:cursor-grabbing"
+              @mouseenter="handleProjectHover($event, index)"
+              @mouseleave="handleProjectLeave"
+              @mousemove="handleProjectMove">
+              <div
+                class="project-card relative p-4 sm:p-5 rounded-xl border transition-all duration-300"
+                :style="{
+                  borderColor: content.color
+                    ? `${content.color}30`
+                    : 'rgba(255,255,255,0.1)',
+                  backgroundColor: content.color
+                    ? `${content.color}05`
+                    : 'rgba(255,255,255,0.02)',
+                }">
+                <!-- 內容 -->
+                <div class="relative z-10">
+                  <h4
+                    class="text-sm sm:text-base font-semibold mb-2 text-white"
+                    :style="{
+                      color: content.color || '#fff',
+                    }">
+                    {{ project.title }}
+                  </h4>
+                  <p
+                    v-if="project.description"
+                    class="text-gray-300 text-xs sm:text-sm mb-3 leading-relaxed">
+                    {{ project.description }}
+                  </p>
+                  <div
+                    v-if="project.tags && project.tags.length > 0"
+                    class="flex flex-wrap gap-2">
+                    <span
+                      v-for="(tag, tagIndex) in project.tags"
+                      :key="tagIndex"
+                      class="px-2 py-1 text-[10px] sm:text-xs rounded-md"
+                      :style="{
+                        backgroundColor: content.color
+                          ? `${content.color}20`
+                          : 'rgba(255,255,255,0.1)',
+                        color: content.color || '#fff',
+                        border: `1px solid ${
+                          content.color
+                            ? content.color + '40'
+                            : 'rgba(255,255,255,0.2)'
+                        }`,
+                      }">
+                      {{ tag }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 連結按鈕 -->
+          <div
+            v-if="content.links && content.links.length > 0"
+            class="flex flex-col gap-2 sm:gap-3 mb-4 sm:mb-6">
+            <a
+              v-for="(link, index) in content.links"
+              :key="index"
+              :href="link.url"
+              :download="link.url.endsWith('.pdf') ? link.url.split('/').pop() : undefined"
+              :target="link.url.endsWith('.pdf') ? undefined : '_blank'"
+              :rel="link.url.endsWith('.pdf') ? undefined : 'noopener noreferrer'"
+              class="px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg text-center cursor-pointer"
+              :style="{
+                backgroundColor: content.color
+                  ? `${content.color}20`
+                  : 'rgba(255,255,255,0.1)',
+                color: content.color || '#fff',
+                border: `1px solid ${
+                  content.color ? content.color + '40' : 'rgba(255,255,255,0.2)'
+                }`,
+                boxShadow: content.color
+                  ? `0 4px 15px ${content.color}20`
+                  : '0 4px 15px rgba(0,0,0,0.2)',
+              }"
+              @click="handleLinkClick(link, $event)">
+              {{ link.label }}
+            </a>
           </div>
         </div>
+      </div>
 
-        <!-- 連結按鈕 -->
-        <div
-          v-if="content.links && content.links.length > 0"
-          class="flex flex-col gap-3 mb-6">
-          <a
-            v-for="(link, index) in content.links"
-            :key="index"
-            :href="link.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="px-6 py-3 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105 hover:shadow-lg text-center cursor-pointer"
-            :style="{
-              backgroundColor: content.color
-                ? `${content.color}20`
-                : 'rgba(255,255,255,0.1)',
-              color: content.color || '#fff',
-              border: `1px solid ${
-                content.color ? content.color + '40' : 'rgba(255,255,255,0.2)'
-              }`,
-              boxShadow: content.color
-                ? `0 4px 15px ${content.color}20`
-                : '0 4px 15px rgba(0,0,0,0.2)',
-            }"
-            @click="handleLinkClick(link, $event)">
-            {{ link.label }}
-          </a>
-        </div>
+      <!-- 中間導航箭頭（超出卡片範圍） -->
+      <div class="arrow-content">
+        <!-- 左箭頭（在卡片左側外面） -->
+        <button
+          @click.stop="emit('prev')"
+          class="arrow-button arrow-left w-10 h-10 flex items-center justify-center rounded-full"
+          :style="{
+            backgroundColor: content.color
+              ? `${content.color}30`
+              : 'rgba(255,255,255,0.15)',
+            border: `2px solid ${
+              content.color ? content.color + '60' : 'rgba(255,255,255,0.3)'
+            }`,
+            boxShadow: content.color
+              ? `0 4px 20px ${content.color}40`
+              : '0 4px 20px rgba(255,255,255,0.1)',
+          }">
+          <svg
+            class="w-6 h-6 text-white group-hover:-translate-x-1 transition-transform duration-200"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
+              d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
 
-        <!-- 中間導航箭頭（超出卡片範圍） -->
-        <div class="arrow-content">
-          <!-- 左箭頭（在卡片左側外面） -->
-          <button
-            @click.stop="emit('prev')"
-            class="arrow-button arrow-left w-10 h-10 flex items-center justify-center rounded-full transition-all duration-200 group"
-            :style="{
-              backgroundColor: content.color
-                ? `${content.color}30`
-                : 'rgba(255,255,255,0.15)',
-              border: `2px solid ${
-                content.color ? content.color + '60' : 'rgba(255,255,255,0.3)'
-              }`,
-              boxShadow: content.color
-                ? `0 4px 20px ${content.color}40`
-                : '0 4px 20px rgba(255,255,255,0.1)',
-            }">
-            <svg
-              class="w-6 h-6 text-white group-hover:-translate-x-1 transition-transform duration-200"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2.5"
-                d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-
-          <!-- 右箭頭（在卡片右側外面） -->
-          <button
-            @click.stop="emit('next')"
-            class="arrow-button arrow-right w-10 h-10 flex items-center justify-center rounded-full transition-all duration-200 group"
-            :style="{
-              backgroundColor: content.color
-                ? `${content.color}30`
-                : 'rgba(255,255,255,0.15)',
-              border: `2px solid ${
-                content.color ? content.color + '60' : 'rgba(255,255,255,0.3)'
-              }`,
-              boxShadow: content.color
-                ? `0 4px 20px ${content.color}40`
-                : '0 4px 20px rgba(255,255,255,0.1)',
-            }">
-            <svg
-              class="w-6 h-6 text-white group-hover:translate-x-1 transition-transform duration-200"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2.5"
-                d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
+        <!-- 右箭頭（在卡片右側外面） -->
+        <button
+          @click.stop="emit('next')"
+          class="arrow-button arrow-right w-10 h-10 flex items-center justify-center rounded-full"
+          :style="{
+            backgroundColor: content.color
+              ? `${content.color}30`
+              : 'rgba(255,255,255,0.15)',
+            border: `2px solid ${
+              content.color ? content.color + '60' : 'rgba(255,255,255,0.3)'
+            }`,
+            boxShadow: content.color
+              ? `0 4px 20px ${content.color}40`
+              : '0 4px 20px rgba(255,255,255,0.1)',
+          }">
+          <svg
+            class="w-6 h-6 text-white group-hover:translate-x-1 transition-transform duration-200"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
+              d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
       <!-- 底部裝飾 -->
@@ -323,6 +768,68 @@ const handleLinkClick = (
         }"></div>
     </div>
   </Transition>
+
+  <!-- 浮動預覽框 -->
+  <div
+    v-if="previewState.visible && previewState.project"
+    ref="previewRef"
+    class="project-preview fixed pointer-events-none z-[9999]"
+    :style="{
+      left: `${previewState.x}px`,
+      top: `${previewState.y}px`,
+      transform: 'translate(-50%, -50%)',
+    }">
+    <div
+      class="preview-card w-64 sm:w-80 rounded-lg overflow-hidden border shadow-2xl pointer-events-auto"
+      style="transform-style: preserve-3d; will-change: transform"
+      :style="{
+        borderColor: props.content?.color
+          ? `${props.content.color}50`
+          : 'rgba(255,255,255,0.2)',
+        backgroundColor: 'rgba(10, 10, 15, 0.95)',
+        backdropFilter: 'blur(20px)',
+        boxShadow: props.content?.color
+          ? `0 25px 80px ${props.content.color}30, 0 0 50px ${props.content.color}20, inset 0 0 30px ${props.content.color}10`
+          : '0 25px 80px rgba(0,0,0,0.9), 0 0 50px rgba(255,255,255,0.15)',
+      }"
+      @click.stop
+      @mouseenter="handlePreviewEnter"
+      @mouseleave="handlePreviewLeave"
+      @mousemove="handlePreviewMove">
+      <!-- 圖片 -->
+      <div
+        v-if="previewState.project.image"
+        class="w-full h-48 sm:h-56 overflow-hidden bg-gray-900 relative">
+        <img
+          :src="previewState.project.image"
+          :alt="previewState.project.title"
+          class="w-full h-full object-cover" />
+        <!-- 圖片遮罩 -->
+        <div
+          class="absolute inset-0"
+          :style="{
+            background: props.content?.color
+              ? `linear-gradient(to bottom, transparent, ${props.content.color}20)`
+              : 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.3))',
+          }"></div>
+      </div>
+      <!-- 內容 -->
+      <div class="p-4 sm:p-5 bg-gradient-to-b from-transparent to-black/20">
+        <h4
+          class="text-base sm:text-lg font-semibold mb-2 text-white"
+          :style="{
+            color: props.content?.color || '#fff',
+          }">
+          {{ previewState.project.title }}
+        </h4>
+        <p
+          v-if="previewState.project.description"
+          class="text-gray-300 text-xs sm:text-sm leading-relaxed">
+          {{ previewState.project.description }}
+        </p>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -355,8 +862,10 @@ const handleLinkClick = (
   left: 0;
   top: 50%;
   width: 100%;
+  height: 100%;
   transform: translateY(-50%);
   pointer-events: none;
+  z-index: 100;
 }
 
 .arrow-button {
@@ -364,7 +873,7 @@ const handleLinkClick = (
   top: 50%;
   transform: translateY(-50%);
   pointer-events: auto;
-  z-index: 10;
+  z-index: 100;
 }
 
 .arrow-left {
@@ -373,5 +882,77 @@ const handleLinkClick = (
 
 .arrow-right {
   right: -50px; /* 超出卡片右側 10px（按鈕寬度40px + 10px間距） */
+}
+
+/* 滾動容器優化 */
+.scroll-container {
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior: contain !important;
+}
+
+/* 自訂滾動條樣式 */
+.scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 作品項目樣式 */
+.project-item {
+  transition: all 0.2s ease;
+}
+
+.project-card {
+  transition: all 0.2s ease;
+}
+
+.project-item:hover .project-card {
+  transform: translateX(4px);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 浮動預覽框樣式 */
+.project-preview {
+  will-change: transform, opacity;
+}
+
+.preview-card {
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+/* 手機版箭頭調整 */
+@media (max-width: 640px) {
+  .arrow-left {
+    left: -18px;
+  }
+
+  .arrow-right {
+    right: -18px;
+  }
+
+  .arrow-button {
+    width: 2rem;
+    height: 2rem;
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    backdrop-filter: blur(8px);
+  }
+
+  .arrow-button svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
 }
 </style>

@@ -7,15 +7,17 @@ export const planetContents: Record<string, PlanetContent> = {
     title: "關於我",
     subtitle: "About Me",
     description:
-      "嗨！我是鈺堂，一位熱愛打造好產品的前端工程師。入職半年就升到前端主任，平常除了把老闆的想法落地實現、重構公司的後台系統、開發活動/專區相關之專案，也面試新夥伴，輔助幫忙同事解決較為複雜的問題。目前已與團隊完成數十個專案，上線後持續維護優化。",
+      "嗨！我是鈺堂，一位熱愛打造好產品的前端工程師。入職半年就晉升前端主管，平常除了把老闆的想法落地實現、重構公司的後台系統、開發活動/專區相關之專案，也面試新夥伴，輔助幫忙同事解決較為複雜的問題。目前已與團隊完成數十個專案，上線後持續維護優化。\n\n" +
+      "我深信技術不只是寫程式碼，更是解決問題、創造價值的工具。在團隊協作中，我注重溝通與效率，喜歡分享知識與經驗，幫助團隊成員成長。面對挑戰時，我總是以積極正面的態度尋找解決方案，並持續學習新技術來提升自己的專業能力。\n\n" +
+      "您好，希望您看完後，願意給彼此一個了解的機會，一起打造更好的產品！如果有任何問題，歡迎與我聯繫！",
     color: "#4db2ff",
     quote: "今天的你要比昨天的你更強大",
     avatar: "/portfolio.jpg",
     details: [
-      { label: "職位", value: "前端工程師 - 主任" },
+      { label: "職位", value: "前端主管" },
       { label: "經驗", value: "4+ 年" },
     ],
-    links: [{ label: "查看更多", url: "/about" }],
+    links: [{ id: "view-skills", label: "看看他會什麼！", url: "/about" }],
   },
   mercury: {
     id: "mercury",
@@ -24,6 +26,7 @@ export const planetContents: Record<string, PlanetContent> = {
     description:
       "持續學習新技術，保持對程式設計的熱情。專注於現代 Web 開發技術棧。",
     color: "#8c7853",
+    quote: "持續學習，保持熱情",
     details: [
       {
         label: "前端框架",
@@ -33,11 +36,22 @@ export const planetContents: Record<string, PlanetContent> = {
       { label: "3D 開發", value: "Three.js, WebGL" },
       { label: "工具", value: "Git, Docker, CI/CD, NPM, GitLab, GitHub" },
     ],
-    links: [{ label: "查看工作經歷", url: "/WorkExperience" }],
+    advantages: [
+      "協助公司招募前端人才，負責面試與評估候選人，為團隊注入新血並建立完善的人才庫，確保團隊持續成長",
+      "帶領前端團隊完成多個大型專案，從需求分析、技術規劃到上線部署全程參與，確保專案品質與時程",
+      "負責前端架構規劃、技術選型與部署流程設計，建立標準化開發流程，確保專案穩定運行與後續維護",
+    ],
+    links: [
+      {
+        id: "view-experience",
+        label: "看看他的工作經歷！",
+        url: "/WorkExperience",
+      },
+    ],
   },
   mars: {
     id: "mars",
-    title: "工作經驗",
+    title: "工作經歷",
     subtitle: "Work Experience",
     description:
       "在三立電視與全球華人媒體的工作經驗中，負責開發與維護多個重要專案。從後台系統重構到活動專區開發及舊專案維護，持續優化使用者體驗並提升系統效能。",
@@ -45,9 +59,17 @@ export const planetContents: Record<string, PlanetContent> = {
     quote: "技術是解決現實問題和創造持久價值的工具",
     details: [
       { label: "三立電視", value: "前端工程師" },
-      { label: "全球華人", value: "前端主任" },
+      { label: "全球華人", value: "前端主管" },
     ],
-    links: [{ label: "查看作品集", url: "/projects" }],
+    coreValues: [
+      "入職半年即升任主任，展現快速學習與適應能力，持續追求個人與團隊成長，建立團隊開發規範並提升整體效能",
+      "獨立打造高可擴展的活動專案模板與模組基底，讓公司能快速複製並建立新專案，已成功應用於超過 200 家合作客戶",
+      "建立跨專案共用的 Web Components 組件庫，讓多個獨立活動網站共用同一套組件，顯著降低開發與維護成本",
+      "成功導入 Nuxt 3 技術棧（由 Vite 起手），主導並參與所有大中小型活動重構與開發，大幅提升專案維護性、效能與開發效率",
+    ],
+    links: [
+      { id: "view-portfolio", label: "看看他的作品集！", url: "/projects" },
+    ],
   },
 
   saturn: {
@@ -61,15 +83,91 @@ export const planetContents: Record<string, PlanetContent> = {
       { label: "類型", value: "Web App, 3D, Mobile" },
       { label: "狀態", value: "持續更新中" },
     ],
+    links: [{ id: "view-contact", label: "我想要了解更多！", url: "/contact" }],
+    projects: [
+      {
+        title: "各子專區",
+        description: "各專區相關專案開發與維護",
+        tags: ["Vue 3", "Nuxt 3", "TypeScript"],
+        image: "/events-project.png",
+      },
+      {
+        title: "Web Components 組件庫",
+        description: "跨專案共用的組件庫，顯著降低開發與維護成本",
+        tags: ["Web Components", "Vue 3", "TypeScript"],
+        image: "/web-components.png",
+      },
+      {
+        title: "後台重構",
+        description: "重構公司後台系統，提升效能與維護性",
+        tags: ["Vue 3", "Nuxt 3", "TypeScript"],
+        image: "/admin.png",
+      },
+      {
+        title: "活動專案模板系統",
+        description: "高可擴展的活動專案模板，已成功應用於超過 200 家合作客戶",
+        tags: ["Vue 3", "Nuxt 3", "TypeScript"],
+        image: "/insight.png",
+      },
+      {
+        title: "婚戀聊天室",
+        description: "AI 配對聊天室系統",
+        tags: ["Vue 3", "Nuxt 3", "TypeScript", "AI"],
+        image: "/ai-match.png",
+      },
+    ],
+  },
+
+  contact: {
+    id: "contact",
+    title: "聯絡資訊",
+    subtitle: "Contact Information",
+    description:
+      "感謝您看到這裡\n\n" + "歡迎與我聯繫，讓我們一起創造更多可能性。",
+    color: "#9b59b6",
+    details: [
+      { label: "信箱", value: "ga2006206521@gmail.com" },
+      { label: "手機", value: "0971-826-616" },
+    ],
+    advantages: [
+      "具備豐富的前端開發經驗與團隊領導能力，能夠快速理解業務需求並轉化為技術方案",
+      "擁有重構大型系統與建立組件庫的經驗，能夠提升團隊開發效率與程式碼品質",
+      "熟悉現代前端技術棧，能夠導入新技術並建立標準化開發流程，確保專案穩定運行",
+      "具備面試與人才招募經驗，能夠協助建立優秀的技術團隊，為公司注入新血",
+    ],
+    coreValues: [
+      "薪資期望：月薪 90,000+ 以上，年薪 120 萬以上",
+      "工作模式：一個月最少有一天遠端或彈性工作",
+      "上下班時間：彈性上下班",
+    ],
     links: [
-      { label: "查看所有作品", url: "/projects" },
-      { label: "GitHub", url: "https://github.com" },
+      {
+        id: "resume-1111",
+        label: "1111 履歷",
+        url: "/resume-1111.pdf",
+      },
+      {
+        id: "resume-104",
+        label: "104 履歷",
+        url: "/resume-104.pdf",
+      },
+
+      {
+        id: "resume-cakeresume",
+        label: "cakeresume 履歷",
+        url: "/resume-cake.pdf",
+      },
     ],
   },
 };
 
 // 根據 menuItem id 獲取內容
 export const getPlanetContent = (id: string): PlanetContent | null => {
+  // 如果 id 直接對應到行星 id，直接返回
+  if (planetContents[id]) {
+    return planetContents[id];
+  }
+
   // 映射 menuItem id 到行星 id
   const idMap: Record<string, string> = {
     home: "earth",
@@ -78,7 +176,7 @@ export const getPlanetContent = (id: string): PlanetContent | null => {
     mars: "mars",
     projects: "saturn",
     saturn: "saturn",
-    contact: "mercury",
+    contact: "mercury", // contact menuItem 對應到 mercury (技能專長)
     mercury: "mercury",
   };
 
