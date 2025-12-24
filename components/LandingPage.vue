@@ -51,9 +51,10 @@ const targetRotation = ref({ x: 0, y: 0 });
 const currentRotation = ref({ x: 0, y: 0 });
 
 // 打字機效果
-const typingText = ref("");
+// 初始化時立即顯示第一行文字和游標
+const typingText = ref<string>(t.value.landing.typing.line1);
 const currentLineIndex = ref(0);
-const isTyping = ref(false);
+const isTyping = ref(true);
 let typingTimer: number | null = null;
 
 // Functions
@@ -98,8 +99,10 @@ const startTyping = () => {
   ];
 
   currentLineIndex.value = 0;
-  // 預設顯示第一行
-  typingText.value = lines[0];
+  // 確保第一行已顯示（如果還沒顯示的話）
+  if (!typingText.value) {
+    typingText.value = lines[0];
+  }
   isTyping.value = true;
 
   const typeNextLine = () => {
@@ -421,18 +424,8 @@ watch(
       clearTimeout(typingTimer);
       typingTimer = null;
     }
-    startTyping();
-  }
-);
-
-// 監聽語言變化，重新開始打字機效果
-watch(
-  () => locale.value,
-  () => {
-    if (typingTimer !== null) {
-      clearTimeout(typingTimer);
-      typingTimer = null;
-    }
+    // 立即更新第一行文字
+    typingText.value = t.value.landing.typing.line1;
     startTyping();
   }
 );
@@ -648,10 +641,10 @@ watch(
 
 /* 打字機游標 */
 .typing-cursor {
+  margin-left: 4px;
   display: inline-block;
-  width: 2px;
-  margin-left: 2px;
-  background-color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 100;
   animation: blink 1s infinite;
 }
 
