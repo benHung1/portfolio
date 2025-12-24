@@ -156,7 +156,7 @@ export const translations = {
           "具備面試與人才招募經驗，能夠協助建立優秀的技術團隊，為公司注入新血",
         ],
         coreValues: [
-          "薪資期望：月薪 90,000+ 以上，年薪 120 萬以上",
+          "薪資期望：月薪 100,000+ 以上，年薪 130 萬以上",
           "工作模式：一個月最少有一天遠端或彈性工作",
           "上下班時間：彈性上下班",
         ],
@@ -323,7 +323,7 @@ export const translations = {
           "Experience in interviewing and talent recruitment, able to help build excellent technical teams and inject new blood into the company",
         ],
         coreValues: [
-          "Salary Expectation: Monthly salary 90,000+ NTD, Annual salary 1.2M+ NTD",
+          "Salary Expectation: Monthly salary 100,000+ NTD, Annual salary 1.3M+ NTD",
           "Work Mode: At least one remote or flexible work day per month",
           "Working Hours: Flexible working hours",
         ],
