@@ -1,39 +1,72 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import MenuScene from '~/components/MenuScene.vue'
+// Imports
+import { ref } from "vue";
+import MenuScene from "@/components/MenuScene.vue";
+import LandingPage from "@/components/LandingPage.vue";
 
+// Constants
 const menuItems = [
-  { id: 'home', label: 'Home', path: '/' },
-  { id: 'about', label: 'About', path: '/about' },
-  { id: 'projects', label: 'Projects', path: '/projects' },
-  { id: 'contact', label: 'Contact', path: '/contact' },
-]
+  { id: "home", label: "Home", path: "/" },
+  { id: "about", label: "About", path: "/about" },
+  { id: "projects", label: "Projects", path: "/projects" },
+  { id: "contact", label: "Contact", path: "/contact" },
+] as const;
 
-const selectedItem = ref<string | null>(null)
+const selectedItem = ref<string | null>(null);
+const showLanding = ref(true);
+const showScene = ref(false);
 
-function handleSelect(item: string) {
-  selectedItem.value = item
-}
+// Functions
+const handleSelect = (item: string) => {
+  selectedItem.value = item;
+};
+
+const handleStart = () => {
+  showLanding.value = false;
+  // 稍微延遲後顯示場景，讓過場動畫完成
+  setTimeout(() => {
+    showScene.value = true;
+  }, 100);
+};
 </script>
 
 <template>
-  <div class="min-h-screen bg-black text-white relative overflow-hidden">
+  <div class="page-container">
+    <!-- 入口畫面 -->
+    <Transition name="fade">
+      <LandingPage v-if="showLanding" @start="handleStart" />
+    </Transition>
+
     <!-- 3D Scene - Full Screen -->
-    <div class="fixed inset-0 w-full h-full">
-      <client-only>
-        <MenuScene :menu-items="menuItems" @select="handleSelect" />
-      </client-only>
-    </div>
+    <Transition name="fade">
+      <div v-if="showScene" class="scene-container">
+        <client-only>
+          <MenuScene
+            :menu-items="menuItems"
+            :auto-open-earth="true"
+            @select="handleSelect" />
+        </client-only>
+      </div>
+    </Transition>
   </div>
 </template>
 
-<style>
-html {
-  scroll-behavior: smooth;
+<style scoped>
+.page-container {
+  @apply min-h-screen bg-black text-white relative overflow-hidden;
 }
-body {
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
+
+.scene-container {
+  @apply fixed inset-0 w-full h-full;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

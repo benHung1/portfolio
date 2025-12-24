@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+// Imports
+import { ref, watch, computed } from "vue";
 import { gsap } from "gsap";
-import type { PlanetContent } from "../types/planetContent";
+import type { PlanetContent } from "@/types/planetContent";
+import {
+  LINK_IDS,
+  PLANET_IDS,
+  ANIMATION_CONFIG,
+  PREVIEW_CONFIG,
+} from "@/utils/constants";
+import { getFileNameFromUrl, getLinkTarget, getLinkRel } from "@/utils/helpers";
+import { useI18n } from "@/composables/useI18n";
 
+// Props & Emits
 const props = defineProps<{
   content: PlanetContent | null;
   visible: boolean;
@@ -16,10 +26,11 @@ const emit = defineEmits<{
   navigateTo: [planetId: string];
 }>();
 
+// Constants
+const { t } = useI18n();
 const panelRef = ref<HTMLElement | null>(null);
 const previewRef = ref<HTMLElement | null>(null);
 
-// 浮動預覽框狀態
 const previewState = ref<{
   visible: boolean;
   x: number;
@@ -36,69 +47,34 @@ const previewState = ref<{
   project: null,
 });
 
-// 當內容變化時，播放動畫
-watch(
-  () => props.visible,
-  (newVal) => {
-    if (newVal && panelRef.value) {
-      gsap.fromTo(
-        panelRef.value,
-        {
-          opacity: 0,
-          y: 50,
-          scale: 0.9,
-        },
-        {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 0.5,
-          ease: "power3.out",
-        }
-      );
-    }
-  }
-);
+const linkIdToPlanetIdMap: Record<string, string> = {
+  [LINK_IDS.VIEW_SKILLS]: PLANET_IDS.MERCURY,
+  [LINK_IDS.VIEW_EXPERIENCE]: PLANET_IDS.MARS,
+  [LINK_IDS.VIEW_PORTFOLIO]: PLANET_IDS.SATURN,
+  [LINK_IDS.VIEW_CONTACT]: PLANET_IDS.CONTACT,
+};
 
-// 當內容變化時，淡出再淡入
-watch(
-  () => props.content,
-  (newContent, oldContent) => {
-    if (panelRef.value && newContent && oldContent) {
-      gsap.to(panelRef.value, {
-        opacity: 0,
-        duration: 0.2,
-        onComplete: () => {
-          if (panelRef.value) {
-            gsap.to(panelRef.value, {
-              opacity: 1,
-              duration: 0.3,
-            });
-          }
-        },
-      });
-    }
-    // 內容變化時隱藏預覽卡片
-    hidePreview();
-  }
-);
+const advantagesTitle = computed(() => {
+  return props.content?.id === PLANET_IDS.CONTACT
+    ? t.value.panel.valueToCompany
+    : t.value.panel.advantages;
+});
 
-// 監聽面板可見性變化
-watch(
-  () => props.visible,
-  (newVal) => {
-    if (!newVal) {
-      // 面板隱藏時，隱藏預覽卡片
-      hidePreview();
-    }
-  }
-);
+const coreValuesTitle = computed(() => {
+  return props.content?.id === PLANET_IDS.CONTACT
+    ? t.value.panel.expectations
+    : t.value.panel.coreValues;
+});
 
+const featuredProjectsTitle = computed(() => {
+  return t.value.panel.featuredProjects;
+});
+
+// Functions
 const handleClose = () => {
   emit("close");
 };
 
-// 處理連結點擊
 const handleLinkClick = (
   link: { id?: string; label: string; url: string },
   event: MouseEvent
@@ -109,31 +85,18 @@ const handleLinkClick = (
     return;
   }
 
+  // 特殊處理：view-skills 使用 next 而不是 navigateTo
+  if (link.id === LINK_IDS.VIEW_SKILLS) {
+    event.preventDefault();
+    emit("next");
+    return;
+  }
+
   // 根據 id 進行導航
-  switch (link.id) {
-    case "view-skills":
-      // 切換到下一個面板（技能專長）
-      event.preventDefault();
-      emit("next");
-      break;
-    case "view-experience":
-      // 導航到工作經驗（mars）
-      event.preventDefault();
-      emit("navigateTo", "mars");
-      break;
-    case "view-portfolio":
-      // 導航到作品展示（saturn）
-      event.preventDefault();
-      emit("navigateTo", "saturn");
-      break;
-    case "view-contact":
-      // 導航到聯絡資訊（contact）
-      event.preventDefault();
-      emit("navigateTo", "contact");
-      break;
-    default:
-      // 其他連結（如外部連結）保持原有行為（跳轉）
-      break;
+  const planetId = linkIdToPlanetIdMap[link.id];
+  if (planetId) {
+    event.preventDefault();
+    emit("navigateTo", planetId);
   }
 };
 
@@ -145,10 +108,8 @@ const handleProjectHover = (event: MouseEvent, index: number) => {
   if (!project) return;
 
   // 計算初始位置（稍微偏移，避免遮擋滑鼠）
-  const offsetX = 30;
-  const offsetY = 30;
-  let targetX = event.clientX + offsetX;
-  let targetY = event.clientY + offsetY;
+  let targetX = event.clientX + PREVIEW_CONFIG.OFFSET_X;
+  let targetY = event.clientY + PREVIEW_CONFIG.OFFSET_Y;
 
   // 顯示預覽框
   previewState.value = {
@@ -179,12 +140,7 @@ const handleProjectHover = (event: MouseEvent, index: number) => {
         opacity: 0,
         scale: 0.8,
       },
-      {
-        opacity: 1,
-        scale: 1,
-        duration: 0.3,
-        ease: "power2.out",
-      }
+      ANIMATION_CONFIG.PREVIEW_SHOW
     );
   }
 };
@@ -232,10 +188,7 @@ const hidePreview = () => {
 
     // 然後隱藏預覽框
     gsap.to(previewRef.value, {
-      opacity: 0,
-      scale: 0.8,
-      duration: 0.2,
-      ease: "power2.in",
+      ...ANIMATION_CONFIG.PREVIEW_HIDE,
       onComplete: () => {
         previewState.value.visible = false;
         previewState.value.project = null;
@@ -265,21 +218,22 @@ const handleProjectMove = (event: MouseEvent) => {
   }
 
   // 更新預覽框位置（稍微偏移，避免遮擋滑鼠）
-  const offsetX = 30;
-  const offsetY = 30;
-
-  let targetX = event.clientX + offsetX;
-  let targetY = event.clientY + offsetY;
+  let targetX = event.clientX + PREVIEW_CONFIG.OFFSET_X;
+  let targetY = event.clientY + PREVIEW_CONFIG.OFFSET_Y;
 
   // 確保預覽框不會超出視窗邊界
-  const previewWidth = 320; // w-80 = 320px
-  const previewHeight = 300; // 估算高度
+  const {
+    WIDTH: previewWidth,
+    HEIGHT: previewHeight,
+    OFFSET_X,
+    OFFSET_Y,
+  } = PREVIEW_CONFIG;
 
   if (targetX + previewWidth / 2 > window.innerWidth) {
-    targetX = event.clientX - offsetX - previewWidth / 2;
+    targetX = event.clientX - OFFSET_X - previewWidth / 2;
   }
   if (targetY + previewHeight / 2 > window.innerHeight) {
-    targetY = event.clientY - offsetY - previewHeight / 2;
+    targetY = event.clientY - OFFSET_Y - previewHeight / 2;
   }
   if (targetX - previewWidth / 2 < 0) {
     targetX = previewWidth / 2;
@@ -300,7 +254,6 @@ const handleProjectMove = (event: MouseEvent) => {
   });
 };
 
-// 處理預覽框內的滑鼠移動（3D 浮動效果）
 const handlePreviewEnter = () => {
   // 滑鼠進入預覽框時，啟用浮動效果
 };
@@ -347,6 +300,50 @@ const handlePreviewMove = (event: MouseEvent) => {
     transformPerspective: 1000,
   });
 };
+
+// Watch
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (newVal && panelRef.value) {
+      gsap.fromTo(
+        panelRef.value,
+        ANIMATION_CONFIG.PANEL_ENTER,
+        ANIMATION_CONFIG.PANEL_ENTER_TO
+      );
+    }
+  }
+);
+
+// 當內容變化時，淡出再淡入
+watch(
+  () => props.content,
+  (newContent, oldContent) => {
+    if (panelRef.value && newContent && oldContent) {
+      gsap.to(panelRef.value, {
+        ...ANIMATION_CONFIG.PANEL_FADE_OUT,
+        onComplete: () => {
+          if (panelRef.value) {
+            gsap.to(panelRef.value, ANIMATION_CONFIG.PANEL_FADE_IN);
+          }
+        },
+      });
+    }
+    // 內容變化時隱藏預覽卡片
+    hidePreview();
+  }
+);
+
+// 監聽面板可見性變化
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (!newVal) {
+      // 面板隱藏時，隱藏預覽卡片
+      hidePreview();
+    }
+  }
+);
 </script>
 
 <template>
@@ -514,7 +511,7 @@ const handlePreviewMove = (event: MouseEvent) => {
               :style="{
                 color: content.color || '#fff',
               }">
-              {{ content.id === "contact" ? "我能帶給公司的價值" : "我的優勢" }}
+              {{ advantagesTitle }}
             </h3>
             <div class="space-y-2">
               <div
@@ -544,7 +541,7 @@ const handlePreviewMove = (event: MouseEvent) => {
               :style="{
                 color: content.color || '#fff',
               }">
-              {{ content.id === "contact" ? "期望條件" : "我的核心價值" }}
+              {{ coreValuesTitle }}
             </h3>
             <div class="space-y-2">
               <div
@@ -609,7 +606,7 @@ const handlePreviewMove = (event: MouseEvent) => {
               :style="{
                 color: content.color || '#fff',
               }">
-              精選作品
+              {{ featuredProjectsTitle }}
             </h3>
             <div
               v-for="(project, index) in content.projects"
@@ -676,9 +673,9 @@ const handlePreviewMove = (event: MouseEvent) => {
               v-for="(link, index) in content.links"
               :key="index"
               :href="link.url"
-              :download="link.url.endsWith('.pdf') ? link.url.split('/').pop() : undefined"
-              :target="link.url.endsWith('.pdf') ? undefined : '_blank'"
-              :rel="link.url.endsWith('.pdf') ? undefined : 'noopener noreferrer'"
+              :download="getFileNameFromUrl(link.url)"
+              :target="getLinkTarget(link.url)"
+              :rel="getLinkRel(link.url)"
               class="px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg text-center cursor-pointer"
               :style="{
                 backgroundColor: content.color

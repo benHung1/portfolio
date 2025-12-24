@@ -1,4 +1,7 @@
 import type { PlanetContent } from "../types/planetContent";
+import type { Locale } from "../composables/useI18n";
+import { translations } from "../composables/useI18n";
+import { PLANET_IDS } from "../utils/constants";
 
 // 行星內容數據
 export const planetContents: Record<string, PlanetContent> = {
@@ -9,7 +12,7 @@ export const planetContents: Record<string, PlanetContent> = {
     description:
       "嗨！我是鈺堂，一位熱愛打造好產品的前端工程師。入職半年就晉升前端主管，平常除了把老闆的想法落地實現、重構公司的後台系統、開發活動/專區相關之專案，也面試新夥伴，輔助幫忙同事解決較為複雜的問題。目前已與團隊完成數十個專案，上線後持續維護優化。\n\n" +
       "我深信技術不只是寫程式碼，更是解決問題、創造價值的工具。在團隊協作中，我注重溝通與效率，喜歡分享知識與經驗，幫助團隊成員成長。面對挑戰時，我總是以積極正面的態度尋找解決方案，並持續學習新技術來提升自己的專業能力。\n\n" +
-      "您好，希望您看完後，願意給彼此一個了解的機會，一起打造更好的產品！如果有任何問題，歡迎與我聯繫！",
+      "希望您看完後，願意給彼此一個了解的機會，一起打造更好的產品。如果有任何問題，歡迎與我聯繫！",
     color: "#4db2ff",
     quote: "今天的你要比昨天的你更強大",
     avatar: "/portfolio.jpg",
@@ -162,24 +165,158 @@ export const planetContents: Record<string, PlanetContent> = {
 };
 
 // 根據 menuItem id 獲取內容
-export const getPlanetContent = (id: string): PlanetContent | null => {
-  // 如果 id 直接對應到行星 id，直接返回
-  if (planetContents[id]) {
-    return planetContents[id];
-  }
-
+export const getPlanetContent = (
+  id: string,
+  locale: Locale = "zh"
+): PlanetContent | null => {
   // 映射 menuItem id 到行星 id
+  // 如果 id 已經是 planetId（如 "earth", "mercury" 等），直接使用
+  // 否則通過 idMap 映射
   const idMap: Record<string, string> = {
-    home: "earth",
-    earth: "earth", // 地球的直接 id
-    about: "mars",
-    mars: "mars",
-    projects: "saturn",
-    saturn: "saturn",
-    contact: "mercury", // contact menuItem 對應到 mercury (技能專長)
-    mercury: "mercury",
+    home: PLANET_IDS.EARTH,
+    about: PLANET_IDS.MERCURY, // about 對應技能專長 (mercury)
+    projects: PLANET_IDS.MARS, // projects 對應工作經歷 (mars)
+    contact: PLANET_IDS.SATURN, // contact menuItem 對應作品展示 (saturn)
   };
 
-  const planetId = idMap[id] || id;
-  return planetContents[planetId] || null;
+  // 如果 id 已經是有效的 planetId（在 planetContents 中存在），直接使用
+  // 否則通過 idMap 映射
+  // 注意：PLANET_IDS.CONTACT 是單獨的聯絡資訊星球，應該直接使用，不要映射
+  let planetId: string;
+  if (planetContents[id]) {
+    // 如果 id 已經是有效的 planetId，直接使用（包括 PLANET_IDS.CONTACT）
+    planetId = id;
+  } else {
+    // 否則通過 idMap 映射
+    planetId = idMap[id] || id;
+  }
+  const t =
+    translations[locale].planets[
+      planetId as keyof typeof translations.zh.planets
+    ];
+
+  if (!t) {
+    // 如果沒有翻譯，返回原始內容
+    return planetContents[planetId] || null;
+  }
+
+  // 根據語言構建內容
+  const baseContent = planetContents[planetId];
+  if (!baseContent) return null;
+
+  // 構建多語言內容
+  const content: PlanetContent = {
+    ...baseContent,
+    title: t.title,
+    subtitle: t.subtitle,
+    description: t.description,
+  };
+
+  // quote 是可選的
+  if ("quote" in t && t.quote) {
+    content.quote = t.quote;
+  }
+
+  // 構建 details
+  if (t.details && baseContent.details) {
+    switch (planetId) {
+      case "earth":
+        if ("position" in t.details) {
+          content.details = [
+            { label: t.details.position, value: t.details.positionValue },
+            { label: t.details.experience, value: t.details.experienceValue },
+          ];
+        }
+        break;
+      case "mercury":
+        if ("framework" in t.details) {
+          content.details = [
+            { label: t.details.framework, value: t.details.frameworkValue },
+            { label: t.details.language, value: t.details.languageValue },
+            { label: t.details.threeD, value: t.details.threeDValue },
+            { label: t.details.tools, value: t.details.toolsValue },
+          ];
+        }
+        break;
+      case "mars":
+        if ("company1" in t.details) {
+          content.details = [
+            { label: t.details.company1, value: t.details.role1 },
+            { label: t.details.company2, value: t.details.role2 },
+          ];
+        }
+        break;
+      case "saturn":
+        if ("count" in t.details) {
+          content.details = [
+            { label: t.details.count, value: t.details.countValue },
+            { label: t.details.type, value: t.details.typeValue },
+            { label: t.details.status, value: t.details.statusValue },
+          ];
+        }
+        break;
+      case "contact":
+        if ("email" in t.details) {
+          content.details = [
+            { label: t.details.email, value: t.details.emailValue },
+            { label: t.details.phone, value: t.details.phoneValue },
+          ];
+        }
+        break;
+    }
+  }
+
+  // 構建 advantages
+  if ("advantages" in t && t.advantages) {
+    content.advantages = [...t.advantages];
+  }
+
+  // 構建 coreValues
+  if ("coreValues" in t && t.coreValues) {
+    content.coreValues = [...t.coreValues];
+  }
+
+  // 構建 links
+  if ("links" in t && t.links && baseContent.links) {
+    const linkKeys = Object.keys(t.links) as Array<keyof typeof t.links>;
+    content.links = baseContent.links.map((link, index) => {
+      const linkKey = linkKeys[index];
+      if (linkKey && linkKey in t.links) {
+        return {
+          ...link,
+          label: t.links[linkKey] as string,
+        };
+      }
+      return link;
+    });
+  }
+
+  // 構建 projects (僅 saturn)
+  if (
+    planetId === "saturn" &&
+    "projects" in t &&
+    t.projects &&
+    baseContent.projects
+  ) {
+    const projectKeys = Object.keys(t.projects) as Array<
+      keyof typeof t.projects
+    >;
+    content.projects = baseContent.projects.map((project, index) => {
+      const projectKey = projectKeys[index];
+      if (projectKey && projectKey in t.projects && t.projects[projectKey]) {
+        const projectTranslation = t.projects[projectKey] as {
+          title: string;
+          description: string;
+        };
+        return {
+          ...project,
+          title: projectTranslation.title,
+          description: projectTranslation.description,
+        };
+      }
+      return project;
+    });
+  }
+
+  return content;
 };

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// Imports
 import { onMounted, onUnmounted, ref, watch, nextTick } from "vue";
 import * as THREE from "three";
 import {
@@ -6,13 +7,15 @@ import {
   CSS3DObject,
 } from "three/addons/renderers/CSS3DRenderer.js";
 import { gsap } from "gsap";
-import type { PlanetContent } from "../types/planetContent";
+import type { PlanetContent } from "@/types/planetContent";
 
+// Props
 const props = defineProps<{
   projects: PlanetContent["projects"];
   color?: string;
 }>();
 
+// Constants
 const containerRef = ref<HTMLElement | null>(null);
 const previewRef = ref<HTMLElement | null>(null);
 
@@ -25,13 +28,10 @@ let animationId: number | null = null;
 let mouse = new THREE.Vector2();
 let hoveredCard: CSS3DObject | null = null;
 let mouseMoveHandler: ((e: MouseEvent) => void) | null = null;
-
-// 旋轉動畫
 let rotationSpeed = 0.005;
 let targetRotation = 0;
 let currentRotation = 0;
 
-// 預覽框狀態
 const previewState = ref<{
   visible: boolean;
   x: number;
@@ -48,7 +48,7 @@ const previewState = ref<{
   project: null,
 });
 
-// 創建 3D 卡片（使用 HTML）
+// Functions
 const createProjectCard = (
   project: NonNullable<PlanetContent["projects"]>[0],
   index: number,
@@ -148,7 +148,6 @@ const createProjectCard = (
   return object;
 };
 
-// 初始化場景
 const initScene = () => {
   if (!containerRef.value) return;
 
@@ -360,6 +359,7 @@ const initScene = () => {
   };
 };
 
+// Vue Lifecycle
 onMounted(() => {
   if (props.projects && props.projects.length > 0) {
     initScene();
@@ -370,7 +370,6 @@ onUnmounted(() => {
   if (animationId !== null) {
     cancelAnimationFrame(animationId);
   }
-  // 清理 CSS3D 物件
   projectCards.forEach((card) => {
     if (card.userData.element && card.userData.element.parentNode) {
       card.userData.element.parentNode.removeChild(card.userData.element);
@@ -381,7 +380,7 @@ onUnmounted(() => {
   }
 });
 
-// 監聽 projects 變化
+// Watch
 watch(
   () => props.projects,
   () => {
