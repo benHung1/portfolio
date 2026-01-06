@@ -67,22 +67,143 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 };
 
+// 墜入星空動畫相關
+const warpSpaceRef = ref<HTMLElement | null>(null);
+const starCount = 300; // 星星數量
+let starAnimations: (gsap.core.Tween | gsap.core.Timeline)[] = [];
+
 const handleStart = () => {
   if (isAnimating.value) return;
 
   isAnimating.value = true;
 
+  // 創建 GSAP 時間軸
+  const tl = gsap.timeline();
+
+  // 1. 淡出內容區域
   if (containerRef.value) {
-    // 淡出動畫
-    gsap.to(containerRef.value, {
-      opacity: 0,
-      scale: 0.9,
-      duration: 0.8,
-      ease: "power2.in",
-      onComplete: () => {
+    const contentElement = containerRef.value.querySelector(".content");
+    const languageSelector =
+      containerRef.value.querySelector(".language-selector");
+
+    if (contentElement) {
+      tl.to(
+        contentElement,
+        {
+          opacity: 0,
+          duration: 0.3,
+          ease: "power2.in",
+        },
+        0
+      );
+    }
+
+    if (languageSelector) {
+      tl.to(
+        languageSelector,
+        {
+          opacity: 0,
+          duration: 0.3,
+          ease: "power2.in",
+        },
+        0
+      );
+    }
+  }
+
+  // 2. 隱藏背景星空
+  if (starfieldRef.value) {
+    tl.to(
+      starfieldRef.value,
+      {
+        opacity: 0,
+        duration: 0.3,
+        ease: "power2.in",
+      },
+      0
+    );
+  }
+
+  // 3. 啟動墜入星空動畫
+  if (warpSpaceRef.value) {
+    const stars = warpSpaceRef.value.querySelectorAll(".warp-star");
+    const warpDuration = 6.0;
+
+    // 顯示墜入星空容器
+    gsap.set(warpSpaceRef.value, { opacity: 1 });
+
+    // 清除之前的動畫
+    starAnimations.forEach((anim) => anim.kill());
+    starAnimations = [];
+
+    // 為每個星星創建動畫
+    stars.forEach((star) => {
+      const size = Math.random() * 2 + 1;
+      const duration = Math.random() * 1.5 + 1.5;
+      const delay = Math.random() * 0.3;
+
+      // 隨機方向（從中心向外）
+      const angle = Math.random() * Math.PI * 2;
+      const distance =
+        Math.random() * Math.min(window.innerWidth, window.innerHeight) * 0.8;
+      const x = Math.cos(angle) * distance;
+      const y = Math.sin(angle) * distance;
+
+      // 初始狀態：在中心，小尺寸，透明
+      gsap.set(star, {
+        x: 0,
+        y: 0,
+        width: size,
+        height: size,
+        scale: 0.2,
+        opacity: 0,
+        rotation: Math.random() * 360,
+      });
+
+      // 創建時間軸：重置 -> 動畫 -> 循環
+      const starTl = gsap.timeline({ repeat: -1, delay: delay });
+      starTl.set(star, {
+        x: 0,
+        y: 0,
+        scale: 0.2,
+        opacity: 0,
+      });
+      starTl.to(star, {
+        x: x * 3,
+        y: y * 3,
+        scale: 5 + Math.random() * 3,
+        opacity: 0.8,
+        duration: duration,
+        ease: "power2.in",
+      });
+
+      const anim = starTl;
+
+      starAnimations.push(anim);
+    });
+
+    // 添加整體模糊和亮度效果
+    tl.to(
+      warpSpaceRef.value,
+      {
+        filter: "blur(10px) brightness(1.3)",
+        duration: warpDuration,
+        ease: "none",
+      },
+      0.1
+    );
+
+    // 在動畫進行到 85% 時觸發頁面切換
+    tl.call(
+      () => {
+        // 停止所有星星動畫
+        starAnimations.forEach((anim) => anim.kill());
+        starAnimations = [];
         emit("start");
       },
-    });
+      [],
+      warpDuration * 0.85
+    );
   } else {
     emit("start");
   }
@@ -389,6 +510,10 @@ onUnmounted(() => {
     typingTimer = null;
   }
 
+  // 清理星星動畫
+  starAnimations.forEach((anim) => anim.kill());
+  starAnimations = [];
+
   // 清理 Three.js 資源
   if (starfieldRef.value && renderer?.domElement) {
     starfieldRef.value.removeChild(renderer.domElement);
@@ -441,6 +566,14 @@ watch(
         ref="starfieldRef"
         class="starfield absolute inset-0 overflow-hidden"></div>
     </client-only>
+
+    <!-- 墜入星空動畫容器 -->
+    <div
+      ref="warpSpaceRef"
+      class="warp-space fixed inset-0 overflow-hidden pointer-events-none z-40"
+      style="opacity: 0">
+      <div v-for="n in starCount" :key="n" class="warp-star"></div>
+    </div>
 
     <!-- 語言下拉選單（左上角） -->
     <div class="language-selector absolute top-6 left-6 z-10">
@@ -565,6 +698,23 @@ watch(
 .starfield {
   background: #0a0a0f;
   pointer-events: none;
+}
+
+/* 墜入星空動畫 */
+.warp-space {
+  background: #0a0a0f;
+}
+
+.warp-star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: white;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
 }
 
 .start-button {
