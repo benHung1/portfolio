@@ -72,10 +72,29 @@ const warpSpaceRef = ref<HTMLElement | null>(null);
 const starCount = 300; // 星星數量
 let starAnimations: (gsap.core.Tween | gsap.core.Timeline)[] = [];
 
-const handleStart = () => {
+// 按鈕狀態
+const isLoading = ref(false);
+
+// 更新按鈕狀態的函數
+const updateButtonState = async () => {
   if (isAnimating.value) return;
 
+  // 更新按鈕狀態
+  isLoading.value = true;
   isAnimating.value = true;
+
+  // 執行動畫
+  setTimeout(handleStart, 1000);
+};
+
+// 開始動畫的函數
+const handleStart = () => {
+  if (!isAnimating.value) return;
+
+  // 0. 立即顯示墜入星空容器（在淡出開始前就顯示，避免黑畫面）
+  if (warpSpaceRef.value) {
+    gsap.set(warpSpaceRef.value, { opacity: 1, display: "block", zIndex: 50 });
+  }
 
   // 創建 GSAP 時間軸
   const tl = gsap.timeline();
@@ -124,13 +143,11 @@ const handleStart = () => {
     );
   }
 
-  // 3. 啟動墜入星空動畫
+  emit("start");
+
+  // 4. 啟動無限執行的墜入星空動畫
   if (warpSpaceRef.value) {
     const stars = warpSpaceRef.value.querySelectorAll(".warp-star");
-    const warpDuration = 6.0;
-
-    // 顯示墜入星空容器
-    gsap.set(warpSpaceRef.value, { opacity: 1 });
 
     // 清除之前的動畫
     starAnimations.forEach((anim) => anim.kill());
@@ -182,30 +199,14 @@ const handleStart = () => {
       starAnimations.push(anim);
     });
 
-    // 添加整體模糊和亮度效果
-    tl.to(
-      warpSpaceRef.value,
-      {
-        filter: "blur(10px) brightness(1.3)",
-        duration: warpDuration,
-        ease: "none",
-      },
-      0.1
-    );
-
-    // 在動畫進行到 85% 時觸發頁面切換
-    tl.call(
-      () => {
-        // 停止所有星星動畫
-        starAnimations.forEach((anim) => anim.kill());
-        starAnimations = [];
-        emit("start");
-      },
-      [],
-      warpDuration * 0.85
-    );
-  } else {
-    emit("start");
+    // 添加整體模糊和亮度效果（無限循環）
+    gsap.to(warpSpaceRef.value, {
+      filter: "blur(10px) brightness(1.3)",
+      duration: 2,
+      ease: "none",
+      repeat: -1,
+      yoyo: true,
+    });
   }
 };
 
@@ -674,16 +675,36 @@ watch(
       <!-- 開始按鈕 -->
       <div class="button-container">
         <button
-          @click="handleStart"
+          @click="updateButtonState"
           :disabled="isAnimating"
-          class="start-button group relative px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full text-white font-medium text-lg sm:text-xl shadow-lg shadow-purple-500/50 hover:shadow-xl hover:shadow-purple-500/70 transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-          <span class="flex items-center gap-3">
+          class="start-button group relative px-8 py-4 bg-gradient-to-r from-orange-500 to-red-500 rounded-full text-white font-medium text-lg sm:text-xl shadow-lg shadow-orange-500/40 hover:shadow-xl hover:shadow-orange-500/60 transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+          <span v-if="!isLoading" class="flex items-center gap-3">
             <span class="dot w-2 h-2 bg-white rounded-full"></span>
             {{ t.landing.startButton }}
           </span>
+          <span v-else class="flex items-center gap-3">
+            <svg
+              class="animate-spin h-5 w-5 text-white"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24">
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>{{ t.landing.loading }}</span>
+          </span>
           <!-- 發光效果 -->
           <div
-            class="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300 -z-10"></div>
+            class="absolute inset-0 rounded-full bg-gradient-to-r from-orange-400 to-red-400 opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300 -z-10"></div>
         </button>
       </div>
     </div>

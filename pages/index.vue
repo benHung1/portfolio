@@ -22,11 +22,16 @@ const handleSelect = (item: string) => {
 };
 
 const handleStart = () => {
-  showLanding.value = false;
-  // 稍微延遲後顯示場景，讓過場動畫完成
+  // 立即在背景開始加載 MenuScene（但先隱藏）
+  showScene.value = true;
+};
+
+const handleSceneReady = () => {
+  // 當 MenuScene 準備好後，等待至少 3 秒讓動畫執行
+  // 然後才隱藏 LandingPage，確保動畫有足夠時間展示
   setTimeout(() => {
-    showScene.value = true;
-  }, 100);
+    showLanding.value = false;
+  }, 3000);
 };
 </script>
 
@@ -38,16 +43,19 @@ const handleStart = () => {
     </Transition>
 
     <!-- 3D Scene - Full Screen -->
-    <Transition name="fade">
-      <div v-if="showScene" class="scene-container">
-        <client-only>
-          <MenuScene
-            :menu-items="menuItems"
-            :auto-open-earth="true"
-            @select="handleSelect" />
-        </client-only>
-      </div>
-    </Transition>
+    <div
+      v-if="showScene"
+      class="scene-container"
+      :class="{ 'opacity-0': showLanding, 'opacity-100': !showLanding }"
+      style="transition: opacity 0.3s ease-in">
+      <client-only>
+        <MenuScene
+          :menu-items="menuItems"
+          :auto-open-earth="true"
+          @select="handleSelect"
+          @ready="handleSceneReady" />
+      </client-only>
+    </div>
   </div>
 </template>
 

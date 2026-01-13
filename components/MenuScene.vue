@@ -22,6 +22,7 @@ import { PLANET_IDS } from "@/utils/constants";
 // Props & Emits
 const emit = defineEmits<{
   select: [id: string];
+  ready: [];
 }>();
 
 const props = defineProps<{
@@ -1733,6 +1734,9 @@ onMounted(() => {
     if (animationId === null) {
       animate();
     }
+
+    // 觸發 ready 事件，通知父組件組件已準備好
+    emit("ready");
 
     // 如果設置了自動打開地球，則打開地球
     if (props.autoOpenEarth) {

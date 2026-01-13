@@ -2,7 +2,7 @@ import { ref, computed } from "vue";
 
 export type Locale = "zh" | "en";
 
-const currentLocale = ref<Locale>("zh");
+const currentLocale = ref<Locale>("en");
 
 // 翻譯內容
 export const translations = {
@@ -11,6 +11,7 @@ export const translations = {
       greeting: "您好，我是鈺堂",
       title: "歡迎，很高興認識您",
       startButton: "讓我看看！",
+      loading: "載入中...",
       language: "語言",
       typing: {
         line1: "歡迎來到我的作品集，我是一名前端開發者",
@@ -173,6 +174,7 @@ export const translations = {
       greeting: "Hello, I am Ben Hung",
       title: "greetings, its a pleasure to meet you",
       startButton: "Let me see!",
+      loading: "Loading...",
       language: "Language",
       typing: {
         line1: "Welcome to my portfolio. I'm a frontend developer",
