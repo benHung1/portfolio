@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// Imports
 import { onMounted, onUnmounted, ref, watch, nextTick } from "vue";
 import * as THREE from "three";
 import {
@@ -9,13 +8,11 @@ import {
 import { gsap } from "gsap";
 import type { PlanetContent } from "@/types/planetContent";
 
-// Props
 const props = defineProps<{
   projects: PlanetContent["projects"];
   color?: string;
 }>();
 
-// Constants
 const containerRef = ref<HTMLElement | null>(null);
 const previewRef = ref<HTMLElement | null>(null);
 
@@ -48,13 +45,11 @@ const previewState = ref<{
   project: null,
 });
 
-// Functions
 const createProjectCard = (
   project: NonNullable<PlanetContent["projects"]>[0],
   index: number,
   total: number
 ): CSS3DObject => {
-  // 創建 HTML 元素
   const element = document.createElement("div");
   element.className = "project-card-3d";
   element.style.width = "300px";
@@ -66,9 +61,8 @@ const createProjectCard = (
   element.style.overflow = "hidden";
   element.style.backfaceVisibility = "hidden";
   element.style.webkitBackfaceVisibility = "hidden";
-  element.style.boxShadow = `0 20px 60px ${props.color || "#fad5a5"}30`;
+    element.style.boxShadow = `0 20px 60px ${props.color || "#fad5a5"}30`;
 
-  // 圖片
   if (project.image) {
     const img = document.createElement("img");
     img.src = project.image;
@@ -80,7 +74,6 @@ const createProjectCard = (
     element.appendChild(img);
   }
 
-  // 標題
   const title = document.createElement("h4");
   title.textContent = project.title;
   title.style.color = props.color || "#fad5a5";
@@ -88,9 +81,8 @@ const createProjectCard = (
   title.style.fontWeight = "bold";
   title.style.marginBottom = "12px";
   title.style.marginTop = "0";
-  element.appendChild(title);
+    element.appendChild(title);
 
-  // 描述
   if (project.description) {
     const desc = document.createElement("p");
     desc.textContent = project.description;
@@ -101,7 +93,6 @@ const createProjectCard = (
     element.appendChild(desc);
   }
 
-  // 標籤
   if (project.tags && project.tags.length > 0) {
     const tagsContainer = document.createElement("div");
     tagsContainer.style.display = "flex";
@@ -124,21 +115,17 @@ const createProjectCard = (
     element.appendChild(tagsContainer);
   }
 
-  // 創建 CSS3D 物件
   const object = new CSS3DObject(element);
-  object.scale.set(0.01, 0.01, 0.01); // CSS3D 使用米為單位，需要縮放
+  object.scale.set(0.01, 0.01, 0.01);
 
-  // 計算位置（圓形排列）
   const radius = 6;
   const angle = (index / total) * Math.PI * 2;
   object.position.x = Math.sin(angle) * radius;
   object.position.z = Math.cos(angle) * radius;
   object.position.y = 0;
 
-  // 讓卡片面向中心
   object.lookAt(0, 0, 0);
 
-  // 存儲項目資訊
   object.userData = {
     project,
     index,
@@ -158,12 +145,10 @@ const initScene = () => {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0a0f);
 
-  // 創建相機
   camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
   camera.position.set(0, 2, 10);
   camera.lookAt(0, 0, 0);
 
-  // 創建 CSS3D 渲染器
   renderer = new CSS3DRenderer();
   renderer.setSize(width, height);
   renderer.domElement.style.position = "absolute";
@@ -172,17 +157,12 @@ const initScene = () => {
   renderer.domElement.style.pointerEvents = "none";
   containerRef.value.appendChild(renderer.domElement);
 
-  // CSS3D 不需要燈光
-
-  // 創建項目組
   projectGroup = new THREE.Group();
   scene.add(projectGroup);
 
-  // 創建卡片
   if (props.projects) {
     props.projects.forEach((project, index) => {
       const card = createProjectCard(project, index, props.projects!.length);
-      // 設置初始透明度
       if (card.userData.element) {
         card.userData.element.style.opacity = "0.7";
       }
@@ -191,19 +171,14 @@ const initScene = () => {
     });
   }
 
-  // CSS3D 不需要 Raycaster
-
-  // 滑鼠移動事件
   mouseMoveHandler = (e: MouseEvent) => {
     if (!containerRef.value) return;
     const rect = containerRef.value.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-    // 控制旋轉
     targetRotation = (e.clientX / window.innerWidth - 0.5) * 0.5;
 
-    // 更新預覽框位置
     if (previewState.value.visible && previewRef.value) {
       previewState.value.x = e.clientX + 30;
       previewState.value.y = e.clientY + 30;
@@ -231,7 +206,6 @@ const initScene = () => {
     const mouseAngle = Math.atan2(mouse.x, -mouse.y);
     const normalizedAngle = ((mouseAngle + Math.PI) / (Math.PI * 2)) % 1;
 
-    // 找到最接近的卡片
     let closestCard: CSS3DObject | null = null;
     let minDistance = Infinity;
 
@@ -350,7 +324,6 @@ const initScene = () => {
 
   window.addEventListener("resize", handleResize);
 
-  // 清理函數
   return () => {
     window.removeEventListener("resize", handleResize);
     if (containerRef.value && mouseMoveHandler) {
@@ -359,7 +332,6 @@ const initScene = () => {
   };
 };
 
-// Vue Lifecycle
 onMounted(() => {
   if (props.projects && props.projects.length > 0) {
     initScene();
@@ -380,12 +352,10 @@ onUnmounted(() => {
   }
 });
 
-// Watch
 watch(
   () => props.projects,
   () => {
     if (props.projects && props.projects.length > 0) {
-      // 清理舊的卡片
       projectCards.forEach((card) => {
         if (card.userData.element && card.userData.element.parentNode) {
           card.userData.element.parentNode.removeChild(card.userData.element);
@@ -393,7 +363,6 @@ watch(
       });
       projectCards = [];
 
-      // 重新初始化場景
       if (containerRef.value && containerRef.value.firstChild) {
         containerRef.value.removeChild(containerRef.value.firstChild);
       }

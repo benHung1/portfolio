@@ -1,12 +1,9 @@
 <script setup lang="ts">
-// Imports
 import { ref, onMounted, onUnmounted } from "vue";
 
-// Constants
 const imageWrapperRef = ref<HTMLElement | null>(null);
 const eyePosition = ref({ x: 0, y: 0 });
 
-// Functions
 const handleMouseMove = (event: MouseEvent) => {
   if (!imageWrapperRef.value) return;
 
@@ -14,11 +11,9 @@ const handleMouseMove = (event: MouseEvent) => {
   const centerX = rect.left + rect.width / 2;
   const centerY = rect.top + rect.height / 2;
 
-  // 計算滑鼠相對於圖片中心的位置
   const mouseX = event.clientX - centerX;
   const mouseY = event.clientY - centerY;
 
-  // 限制移動範圍（眼睛最多移動 2px，避免超出眼眶）
   const maxMove = 2.5;
   const distance = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
   const moveX =
@@ -26,12 +21,10 @@ const handleMouseMove = (event: MouseEvent) => {
   const moveY =
     distance > 0 ? (mouseY / distance) * Math.min(distance * 0.15, maxMove) : 0;
 
-  // 使用緩動效果讓眼睛移動更平滑
   eyePosition.value.x += (moveX - eyePosition.value.x) * 0.3;
   eyePosition.value.y += (moveY - eyePosition.value.y) * 0.3;
 };
 
-// Vue Lifecycle
 onMounted(() => {
   window.addEventListener("mousemove", handleMouseMove);
 });
@@ -51,7 +44,6 @@ onUnmounted(() => {
       srcset="/cutie.png 1x"
       class="w-full h-full cutie-image rounded-full object-cover" />
 
-    <!-- 左眼 -->
     <div
       class="left-eye absolute top-[66px] left-[55px] w-[15px] h-[15px] rounded-full overflow-hidden"
       :style="{
@@ -68,7 +60,6 @@ onUnmounted(() => {
         style="filter: blur(0.5px)"></div>
     </div>
 
-    <!-- 右眼 -->
     <div
       class="right-eye absolute top-[58px] right-[60px] w-[15px] h-[15px] rounded-full overflow-hidden"
       :style="{
@@ -95,7 +86,6 @@ onUnmounted(() => {
 .cutie-image {
   animation: cutieGlow 3s ease-in-out infinite;
   opacity: 0.8;
-  /* cutieFade 4s ease-in-out infinite; */
 }
 
 .left-eye,

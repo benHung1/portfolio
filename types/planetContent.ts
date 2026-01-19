@@ -1,21 +1,38 @@
-// 行星內容數據結構
 export interface PlanetContent {
   id: string;
   title: string;
   subtitle?: string;
   description: string;
   icon?: string;
-  avatar?: string; // 頭像圖片 URL
-  quote?: string; // 勵志名言
+  avatar?: string;
+  quote?: string;
   details?: {
     label: string;
     value: string;
   }[];
-  strengths?: string[]; // 擅長項目列表
-  advantages?: string[]; // 我的優勢
-  coreValues?: string[]; // 我的核心價值
+  strengths?: string[];
+  advantages?: string[] | Array<{
+    name: string;
+    role: string;
+    avatar?: string;
+    content: string;
+  }> | {
+    supervisors: Array<{
+      name: string;
+      role: string;
+      avatar?: string;
+      content: string;
+    }>;
+    colleagues: Array<{
+      name: string;
+      role: string;
+      avatar?: string;
+      content: string;
+    }>;
+  };
+  coreValues?: string[];
   links?: {
-    id: string; // 唯一的連結 ID，用於導航邏輯
+    id: string;
     label: string;
     url: string;
     icon?: string;
@@ -25,7 +42,7 @@ export interface PlanetContent {
     description?: string;
     url?: string;
     tags?: string[];
-    image?: string; // 專案示意圖
+    image?: string;
   }[];
-  color?: string; // 主題顏色
+  color?: string;
 }

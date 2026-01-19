@@ -8,8 +8,8 @@ export interface DeviceInfo {
   isDesktop: boolean;
 }
 
-const width = ref<number>(0);
-const height = ref<number>(0);
+const width = ref<number>(typeof window !== "undefined" ? window.innerWidth : 1024);
+const height = ref<number>(typeof window !== "undefined" ? window.innerHeight : 768);
 
 const updateSize = () => {
   if (typeof window !== "undefined") {
@@ -19,6 +19,11 @@ const updateSize = () => {
 };
 
 export const useDevice = () => {
+  // 確保在客戶端立即初始化
+  if (typeof window !== "undefined") {
+    updateSize();
+  }
+
   const isMobile = computed(() => width.value < 768);
   const isTablet = computed(() => width.value >= 768 && width.value < 1024);
   const isDesktop = computed(() => width.value >= 1024);

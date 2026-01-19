@@ -1,20 +1,17 @@
 <script setup lang="ts">
-// Imports
 import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { gsap } from "gsap";
 import * as THREE from "three";
 import { useI18n } from "@/composables/useI18n";
 import CutieCharacter from "@/components/CutieCharacter.vue";
+import MobileWarning from "@/components/MobileWarning.vue";
 
-// SSR 安全檢查
 const isClient = typeof window !== "undefined";
 
-// Emits & Props
 const emit = defineEmits<{
   start: [];
 }>();
 
-// Constants
 const { t, setLocale, locale } = useI18n();
 const containerRef = ref<HTMLElement | null>(null);
 const starfieldRef = ref<HTMLElement | null>(null);
@@ -22,7 +19,6 @@ const isAnimating = ref(false);
 const showLanguageDropdown = ref(false);
 const languageDropdownRef = ref<HTMLElement | null>(null);
 
-// Three.js constants
 const STARFIELD_CONFIG = {
   PARTICLE_COUNT: 500000,
   SPREAD: 5000,
@@ -40,7 +36,6 @@ const CAMERA_CONFIG = {
 
 const BACKGROUND_COLOR = 0x0a0a0f;
 
-// Three.js variables
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
 let renderer: THREE.WebGLRenderer;
@@ -50,14 +45,11 @@ let handleResize: (() => void) | null = null;
 const targetRotation = ref({ x: 0, y: 0 });
 const currentRotation = ref({ x: 0, y: 0 });
 
-// 打字機效果
-// 初始化時立即顯示第一行文字和游標
 const typingText = ref<string>(t.value.landing.typing.line1);
 const currentLineIndex = ref(0);
 const isTyping = ref(true);
 let typingTimer: number | null = null;
 
-// Functions
 const handleClickOutside = (event: MouseEvent) => {
   if (
     languageDropdownRef.value &&
@@ -67,39 +59,27 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 };
 
-// 墜入星空動畫相關
 const warpSpaceRef = ref<HTMLElement | null>(null);
-const starCount = 300; // 星星數量
+const starCount = 300;
 let starAnimations: (gsap.core.Tween | gsap.core.Timeline)[] = [];
-
-// 按鈕狀態
 const isLoading = ref(false);
 
-// 更新按鈕狀態的函數
 const updateButtonState = async () => {
   if (isAnimating.value) return;
-
-  // 更新按鈕狀態
   isLoading.value = true;
   isAnimating.value = true;
-
-  // 執行動畫
   setTimeout(handleStart, 1000);
 };
 
-// 開始動畫的函數
 const handleStart = () => {
   if (!isAnimating.value) return;
 
-  // 0. 立即顯示墜入星空容器（在淡出開始前就顯示，避免黑畫面）
   if (warpSpaceRef.value) {
     gsap.set(warpSpaceRef.value, { opacity: 1, display: "block", zIndex: 50 });
   }
 
-  // 創建 GSAP 時間軸
   const tl = gsap.timeline();
 
-  // 1. 淡出內容區域
   if (containerRef.value) {
     const contentElement = containerRef.value.querySelector(".content");
     const languageSelector =
@@ -130,7 +110,6 @@ const handleStart = () => {
     }
   }
 
-  // 2. 隱藏背景星空
   if (starfieldRef.value) {
     tl.to(
       starfieldRef.value,
@@ -145,28 +124,23 @@ const handleStart = () => {
 
   emit("start");
 
-  // 4. 啟動無限執行的墜入星空動畫
   if (warpSpaceRef.value) {
     const stars = warpSpaceRef.value.querySelectorAll(".warp-star");
 
-    // 清除之前的動畫
     starAnimations.forEach((anim) => anim.kill());
     starAnimations = [];
 
-    // 為每個星星創建動畫
     stars.forEach((star) => {
       const size = Math.random() * 2 + 1;
       const duration = Math.random() * 1.5 + 1.5;
       const delay = Math.random() * 0.3;
 
-      // 隨機方向（從中心向外）
       const angle = Math.random() * Math.PI * 2;
       const distance =
         Math.random() * Math.min(window.innerWidth, window.innerHeight) * 0.8;
       const x = Math.cos(angle) * distance;
       const y = Math.sin(angle) * distance;
 
-      // 初始狀態：在中心，小尺寸，透明
       gsap.set(star, {
         x: 0,
         y: 0,
@@ -177,7 +151,6 @@ const handleStart = () => {
         rotation: Math.random() * 360,
       });
 
-      // 創建時間軸：重置 -> 動畫 -> 循環
       const starTl = gsap.timeline({ repeat: -1, delay: delay });
       starTl.set(star, {
         x: 0,
@@ -199,7 +172,6 @@ const handleStart = () => {
       starAnimations.push(anim);
     });
 
-    // 添加整體模糊和亮度效果（無限循環）
     gsap.to(warpSpaceRef.value, {
       filter: "blur(10px) brightness(1.3)",
       duration: 2,
@@ -210,7 +182,6 @@ const handleStart = () => {
   }
 };
 
-// 打字機效果（循環播放，包含刪除效果）
 const startTyping = () => {
   if (!isClient) return;
 
@@ -221,7 +192,6 @@ const startTyping = () => {
   ];
 
   currentLineIndex.value = 0;
-  // 確保第一行已顯示（如果還沒顯示的話）
   if (!typingText.value) {
     typingText.value = lines[0];
   }
@@ -229,28 +199,24 @@ const startTyping = () => {
 
   const typeNextLine = () => {
     const currentLine = lines[currentLineIndex.value];
-    let charIndex = currentLine.length; // 從完整文字開始（因為已經顯示了）
+    let charIndex = currentLine.length;
 
-    // 先刪除當前行
     const deleteChar = () => {
       if (charIndex > 0) {
         typingText.value = currentLine.substring(0, charIndex - 1);
         charIndex--;
-        typingTimer = window.setTimeout(deleteChar, 30); // 刪除速度（比打字快）
+        typingTimer = window.setTimeout(deleteChar, 30);
       } else {
-        // 刪除完成，切換到下一行
         currentLineIndex.value++;
 
-        // 如果已經打完所有行，重置到第一行（循環）
         if (currentLineIndex.value >= lines.length) {
           currentLineIndex.value = 0;
         }
 
-        typingText.value = ""; // 清空準備下一行
+        typingText.value = "";
         const nextLine = lines[currentLineIndex.value];
         let nextCharIndex = 0;
 
-        // 開始打下一行
         const typeChar = () => {
           if (nextCharIndex < nextLine.length) {
             typingText.value = nextLine.substring(0, nextCharIndex + 1);
@@ -289,7 +255,6 @@ const createStarColor = (brightness: number): THREE.Color => {
     );
   }
   if (brightness > 0.95) {
-    // 3% 的較亮星星
     const whiteBrightness = 0.7 + Math.random() * 0.2;
     return new THREE.Color(
       whiteBrightness,
@@ -298,16 +263,13 @@ const createStarColor = (brightness: number): THREE.Color => {
     );
   }
   if (brightness > 0.9) {
-    // 5% 的彩色星星
     const hue = 0.5 + Math.random() * 0.2;
     return new THREE.Color().setHSL(hue, 0.6, 0.7 + Math.random() * 0.3);
   }
-  // 90% 的普通星星
   const starBrightness = 0.4 + Math.random() * 0.5;
   return new THREE.Color(starBrightness, starBrightness, starBrightness + 0.1);
 };
 
-// 創建星空背景
 const createStarfield = (): THREE.Points => {
   const { PARTICLE_COUNT, SPREAD } = STARFIELD_CONFIG;
   const positions: number[] = [];
@@ -366,7 +328,6 @@ const createStarfield = (): THREE.Points => {
   return new THREE.Points(geometry, material);
 };
 
-// 處理滑鼠移動（使用節流優化性能）
 let mouseMoveTimer: number | null = null;
 const handleMouseMove = (event: MouseEvent) => {
   if (!isClient || mouseMoveTimer) return;
@@ -376,11 +337,9 @@ const handleMouseMove = (event: MouseEvent) => {
     const centerX = innerWidth / 2;
     const centerY = innerHeight / 2;
 
-    // 計算滑鼠相對於視窗中心的位置（-1 到 1）
     const mouseX = (event.clientX - centerX) / centerX;
     const mouseY = (event.clientY - centerY) / centerY;
 
-    // 計算目標旋轉角度
     targetRotation.value.x = -mouseY * STARFIELD_CONFIG.MAX_ROTATION;
     targetRotation.value.y = mouseX * STARFIELD_CONFIG.MAX_ROTATION;
 
@@ -388,21 +347,18 @@ const handleMouseMove = (event: MouseEvent) => {
   });
 };
 
-// 動畫循環
 const animate = () => {
   if (!isClient) return;
   animationId = window.requestAnimationFrame(animate);
 
   if (!starfield || !renderer || !scene || !camera) return;
 
-  // 平滑插值旋轉
   const { ROTATION_SMOOTHING, AUTO_ROTATION_SPEED } = STARFIELD_CONFIG;
   currentRotation.value.x +=
     (targetRotation.value.x - currentRotation.value.x) * ROTATION_SMOOTHING;
   currentRotation.value.y +=
     (targetRotation.value.y - currentRotation.value.y) * ROTATION_SMOOTHING;
 
-  // 應用旋轉到星空
   starfield.rotation.x = THREE.MathUtils.degToRad(currentRotation.value.x);
   starfield.rotation.y =
     THREE.MathUtils.degToRad(currentRotation.value.y) + AUTO_ROTATION_SPEED;
@@ -410,7 +366,6 @@ const animate = () => {
   renderer.render(scene, camera);
 };
 
-// 初始化 Three.js
 const initializeThreeJS = () => {
   if (!isClient || !starfieldRef.value) return;
 
@@ -418,11 +373,9 @@ const initializeThreeJS = () => {
   const width = container.clientWidth || window.innerWidth;
   const height = container.clientHeight || window.innerHeight;
 
-  // Scene
   scene = new THREE.Scene();
   scene.background = new THREE.Color(BACKGROUND_COLOR);
 
-  // Camera
   camera = new THREE.PerspectiveCamera(
     CAMERA_CONFIG.FOV,
     width / height,
@@ -431,7 +384,6 @@ const initializeThreeJS = () => {
   );
   camera.position.set(0, 0, 0);
 
-  // Renderer
   renderer = new THREE.WebGLRenderer({
     antialias: true,
     alpha: true,
@@ -440,7 +392,6 @@ const initializeThreeJS = () => {
   renderer.setSize(width, height);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-  // 設置渲染器樣式
   const canvas = renderer.domElement;
   Object.assign(canvas.style, {
     display: "block",
@@ -453,11 +404,9 @@ const initializeThreeJS = () => {
 
   container.appendChild(canvas);
 
-  // 創建星空
   starfield = createStarfield();
   scene.add(starfield);
 
-  // 處理窗口大小變化
   handleResize = () => {
     if (!isClient || !container || !renderer || !camera) return;
     const w = container.clientWidth || window.innerWidth;
@@ -470,18 +419,14 @@ const initializeThreeJS = () => {
   window.addEventListener("resize", handleResize);
   window.addEventListener("mousemove", handleMouseMove);
 
-  // 啟動動畫
   animate();
 };
 
-// Vue Lifecycle
 onMounted(() => {
   document.addEventListener("click", handleClickOutside);
 
-  // 使用 nextTick 確保 client-only 組件已渲染
   nextTick(() => {
     initializeThreeJS();
-    // 開始打字機效果
     startTyping();
   });
 });
@@ -511,11 +456,9 @@ onUnmounted(() => {
     typingTimer = null;
   }
 
-  // 清理星星動畫
   starAnimations.forEach((anim) => anim.kill());
   starAnimations = [];
 
-  // 清理 Three.js 資源
   if (starfieldRef.value && renderer?.domElement) {
     starfieldRef.value.removeChild(renderer.domElement);
   }
@@ -541,7 +484,6 @@ onUnmounted(() => {
   }
 });
 
-// 監聽語言變化，重新開始打字機效果
 watch(
   () => locale.value,
   () => {
@@ -550,7 +492,6 @@ watch(
       clearTimeout(typingTimer);
       typingTimer = null;
     }
-    // 立即更新第一行文字
     typingText.value = t.value.landing.typing.line1;
     startTyping();
   }
@@ -561,14 +502,15 @@ watch(
   <div
     ref="containerRef"
     class="landing-page fixed inset-0 w-full h-full flex items-center justify-center z-50">
-    <!-- 星空背景 - Three.js -->
+    <!-- 手機版提醒 -->
+    <MobileWarning />
+
     <client-only>
       <div
         ref="starfieldRef"
         class="starfield absolute inset-0 overflow-hidden"></div>
     </client-only>
 
-    <!-- 墜入星空動畫容器 -->
     <div
       ref="warpSpaceRef"
       class="warp-space fixed inset-0 overflow-hidden pointer-events-none z-40"
@@ -576,8 +518,7 @@ watch(
       <div v-for="n in starCount" :key="n" class="warp-star"></div>
     </div>
 
-    <!-- 語言下拉選單（左上角） -->
-    <div class="language-selector absolute top-6 left-6 z-10">
+    <div class="language-selector absolute top-[40px] right-[6px] z-10">
       <div ref="languageDropdownRef" class="relative">
         <button
           @click="showLanguageDropdown = !showLanguageDropdown"
@@ -611,7 +552,6 @@ watch(
           </svg>
         </button>
 
-        <!-- 下拉選單 -->
         <Transition
           enter-active-class="transition ease-out duration-100"
           enter-from-class="transform opacity-0 scale-95"
@@ -653,11 +593,9 @@ watch(
       </div>
     </div>
 
-    <!-- 主要內容 -->
     <div
       class="content relative z-10 text-center px-4 flex flex-col items-center gap-2">
       <CutieCharacter />
-      <!-- 問候語 - 簍空字效果 -->
       <div class="greeting mb-4">
         <h2
           class="outline-text text-2xl sm:text-3xl md:text-4xl font-bold mb-2 tracking-wide">
@@ -665,14 +603,12 @@ watch(
         </h2>
       </div>
 
-      <!-- 打字機效果文字 -->
       <div class="typing-text mb-8">
         <p class="text-lg sm:text-xl md:text-2xl text-white/80 leading-relaxed">
           {{ typingText }}<span v-if="isTyping" class="typing-cursor">|</span>
         </p>
       </div>
 
-      <!-- 開始按鈕 -->
       <div class="button-container">
         <button
           @click="updateButtonState"
@@ -702,7 +638,6 @@ watch(
             </svg>
             <span>{{ t.landing.loading }}</span>
           </span>
-          <!-- 發光效果 -->
           <div
             class="absolute inset-0 rounded-full bg-gradient-to-r from-orange-400 to-red-400 opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300 -z-10"></div>
         </button>

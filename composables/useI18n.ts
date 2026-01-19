@@ -2,7 +2,7 @@ import { ref, computed } from "vue";
 
 export type Locale = "zh" | "en";
 
-const currentLocale = ref<Locale>("en");
+const currentLocale = ref<Locale>("zh");
 
 // 翻譯內容
 export const translations = {
@@ -26,6 +26,8 @@ export const translations = {
       experience: "工作經歷",
       portfolio: "作品展示",
       contact: "聯絡資訊",
+      reviews: "主管＆同事評價",
+      navigation: "導航",
     },
     panel: {
       advantages: "我的優勢",
@@ -33,6 +35,10 @@ export const translations = {
       coreValues: "我的核心價值",
       expectations: "期望條件",
       featuredProjects: "精選作品",
+      supervisorReviews: "主管評價",
+      colleagueReviews: "同事評價",
+      expand: "展開",
+      collapse: "收起",
     },
     planets: {
       earth: {
@@ -113,7 +119,7 @@ export const translations = {
           statusValue: "持續更新中",
         },
         links: {
-          viewContact: "我想要了解更多！",
+          viewReviews: "看看他的評價！",
         },
         projects: {
           events: {
@@ -158,13 +164,77 @@ export const translations = {
         ],
         coreValues: [
           "薪資期望：月薪 100,000+ 以上，年薪 130 萬以上",
-          "工作模式：一個月最少有一天遠端或彈性工作",
+          "工作模式：全遠端或者一週至少有一天遠端或彈性上班",
           "上下班時間：彈性上下班",
         ],
         links: {
           resume1111: "1111 履歷",
           resume104: "104 履歷",
           resumeCake: "cakeresume 履歷",
+        },
+      },
+      reviews: {
+        title: "主管＆同事評價",
+        subtitle: "Reviews & Feedback",
+        description:
+          "來自主管與同事的真實評價，展現我在團隊中的表現與價值。",
+        quote: "團隊合作，共同成長",
+        advantages: {
+          supervisors: [
+            {
+              name: "yao",
+              role: "工程部 協理",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-01m.webp",
+              content: "阿班在技術能力上表現優秀，能夠快速理解複雜的業務需求並轉化為可行的技術方案。他在團隊協作中展現出良好的溝通能力，總能清楚地傳達技術概念。唯一的小缺點是出勤時間比較固定，每天穩定九點上班，表定是八點半，這點確實沒有彈性，但至少很準時！",
+            },
+            {
+              name: "jason",
+              role: "工程部 總經理",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-03m.webp",
+              content: "阿班是個很有責任感的工程師，對專案品質要求高，能夠確保專案按時交付且品質優良。他在技術選型和架構設計上有獨到的見解，是團隊中值得信賴的夥伴。不過他的上班時間真的很穩定，九點準時到，表定八點半對他來說可能只是參考值，這點倒是挺有個人風格的。",
+            },
+            {
+              name: "james",
+              role: "工程部 經理",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-07m.webp",
+              content: "阿班的技術能力強，能夠快速解決複雜問題，並提供優雅的解決方案。在團隊中總是能提出創新的想法，幫助團隊成員成長。他的工作態度積極，對專案投入度高。唯一可以改進的是出勤時間，每天九點準時到，表定八點半對他來說似乎只是個建議，但至少他從不遲到，這也算是一種穩定吧！",
+            },
+            {
+              name: "宇",
+              role: "工程部 經理",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-08m.webp",
+              content: "阿班是個優秀的前端工程師，技術能力全面，從 Vue、Nuxt 到 Three.js 都能熟練運用。他在團隊中扮演重要的技術顧問角色，總能協助解決技術難題。溝通能力佳，能夠清楚表達技術概念。唯一的小問題是出勤時間，每天穩定九點到，表定八點半對他來說可能太早了，但至少他從不遲到，這也算是一種另類的準時吧！",
+            },
+          ],
+          colleagues: [
+            {
+              name: "ryder",
+              role: "前端主任",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-04m.webp",
+              content: "班班是個很棒的技術夥伴，技術能力強，能夠快速解決複雜問題。在團隊協作中總是能提出創新的想法，幫助大家成長。他的程式碼品質很高，寫出來的東西總是既優雅又實用。唯一的小缺點是出勤時間，每天穩定九點到，表定八點半對他來說可能只是個參考，但至少他從不遲到，這點倒是挺有個人特色的！",
+            },
+            {
+              name: "elis",
+              role: "member",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-05w.webp",
+              content: "班班是個很熱心的同事，技術能力強，遇到問題時總是很樂意幫忙。他的溝通能力很好，能夠清楚解釋技術概念，讓團隊成員更容易理解。在專案開發中總是能提供優雅的解決方案。唯一可以改進的是出勤時間，每天九點準時到，表定八點半對他來說可能太早了，但至少他從不遲到，這也算是一種另類的準時吧！",
+            },
+            {
+              name: "yichia",
+              role: "member",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-04w.webp",
+              content: "班班是個很可靠的同事，技術能力全面，從前端框架到 3D 開發都能熟練運用。他在團隊中總是能提出創新的想法，幫助大家解決技術難題。溝通能力佳，能夠清楚表達技術概念。唯一的小問題是出勤時間，每天穩定九點到，表定八點半對他來說可能只是個建議，但至少他從不遲到，這點倒是挺有個人風格的！",
+            },
+            {
+              name: "小楊",
+              role: "member",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-05m.webp",
+              content: "班班是個很棒的技術夥伴，技術能力強，能夠快速解決複雜問題並提供優雅的解決方案。在團隊協作中總是能提出創新的想法，幫助大家成長。他的程式碼品質很高，寫出來的東西總是既優雅又實用。唯一的小缺點是出勤時間，每天穩定九點到，表定八點半對他來說可能只是個參考值，但至少他從不遲到，這也算是一種穩定吧！",
+            },
+          ],
+        },
+        links: {
+          viewContact: "我想要了解更多！",
         },
       },
     },
@@ -190,6 +260,8 @@ export const translations = {
       experience: "Work Experience",
       portfolio: "Portfolio",
       contact: "Contact Information",
+      reviews: "Reviews & Feedback",
+      navigation: "Navigation",
     },
     panel: {
       advantages: "My Advantages",
@@ -197,6 +269,10 @@ export const translations = {
       coreValues: "My Core Values",
       expectations: "Expectations",
       featuredProjects: "Featured Projects",
+      supervisorReviews: "Supervisor Reviews",
+      colleagueReviews: "Colleague Reviews",
+      expand: "Expand",
+      collapse: "Collapse",
     },
     planets: {
       earth: {
@@ -333,6 +409,70 @@ export const translations = {
           resume1111: "1111 Resume",
           resume104: "104 Resume",
           resumeCake: "CakeResume Resume",
+        },
+      },
+      reviews: {
+        title: "Reviews & Feedback",
+        subtitle: "Reviews & Feedback",
+        description:
+          "Real feedback from supervisors and colleagues, showcasing my performance and value in the team.",
+        quote: "Team collaboration, grow together",
+        advantages: {
+          supervisors: [
+            {
+              name: "Yao",
+              role: "Engineering Department VP",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-01m.webp",
+              content: "Ben is excellent in technical capabilities, able to quickly understand complex business requirements and transform them into feasible technical solutions. He demonstrates good communication skills in team collaboration and can always clearly convey technical concepts. The only minor drawback is his attendance time - he consistently arrives at 9 AM, while the scheduled time is 8:30 AM. There's no flexibility there, but at least he's always on time!",
+            },
+            {
+              name: "Jason",
+              role: "Engineering Department General Manager",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-03m.webp",
+              content: "Ben is a very responsible engineer with high standards for project quality, able to ensure projects are delivered on time with excellent quality. He has unique insights in technology selection and architecture design, making him a trusted partner in the team. However, his work hours are really consistent - he arrives at 9 AM sharp, while the scheduled time of 8:30 AM might just be a reference for him. This is quite characteristic of his personal style!",
+            },
+            {
+              name: "James",
+              role: "Engineering Department Manager",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-07m.webp",
+              content: "Ben has strong technical skills and can quickly solve complex problems while providing elegant solutions. He always brings innovative ideas to the team and helps team members grow. His work attitude is positive and he's highly committed to projects. The only area for improvement is attendance time - he arrives at 9 AM sharp every day, while the scheduled 8:30 AM seems to be just a suggestion for him. But at least he's never late, which is a kind of stability!",
+            },
+            {
+              name: "Yu",
+              role: "Engineering Department Manager",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-08m.webp",
+              content: "Ben is an excellent frontend engineer with comprehensive technical skills, proficient in everything from Vue, Nuxt to Three.js. He plays an important role as a technical advisor in the team and can always help solve technical challenges. He has good communication skills and can clearly express technical concepts. The only minor issue is attendance time - he consistently arrives at 9 AM, while the scheduled 8:30 AM might be too early for him. But at least he's never late, which is a kind of alternative punctuality!",
+            },
+          ],
+          colleagues: [
+            {
+              name: "Ryder",
+              role: "Frontend Lead",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-04m.webp",
+              content: "Benben is a great technical partner with strong technical skills who can quickly solve complex problems. In team collaboration, he always brings innovative ideas and helps everyone grow. His code quality is high, and what he writes is always both elegant and practical. The only minor drawback is attendance time - he consistently arrives at 9 AM, while the scheduled 8:30 AM might just be a reference for him. But at least he's never late, which is quite characteristic!",
+            },
+            {
+              name: "Elis",
+              role: "Member",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-05w.webp",
+              content: "Benben is a very helpful colleague with strong technical skills who's always willing to help when problems arise. He has good communication skills and can clearly explain technical concepts, making it easier for team members to understand. In project development, he can always provide elegant solutions. The only area for improvement is attendance time - he arrives at 9 AM sharp, while the scheduled 8:30 AM might be too early for him. But at least he's never late, which is a kind of alternative punctuality!",
+            },
+            {
+              name: "Yichia",
+              role: "Member",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-04w.webp",
+              content: "Benben is a very reliable colleague with comprehensive technical skills, proficient in everything from frontend frameworks to 3D development. In the team, he always brings innovative ideas and helps everyone solve technical challenges. He has good communication skills and can clearly express technical concepts. The only minor issue is attendance time - he consistently arrives at 9 AM, while the scheduled 8:30 AM might just be a suggestion for him. But at least he's never late, which is quite characteristic!",
+            },
+            {
+              name: "Xiao Yang",
+              role: "Member",
+              avatar: "https://images.1111.com.tw/event/img/event25/aiMatch/avatars/personality-avatar-05m.webp",
+              content: "Benben is a great technical partner with strong technical skills who can quickly solve complex problems and provide elegant solutions. In team collaboration, he always brings innovative ideas and helps everyone grow. His code quality is high, and what he writes is always both elegant and practical. The only minor drawback is attendance time - he consistently arrives at 9 AM, while the scheduled 8:30 AM might just be a reference value for him. But at least he's never late, which is a kind of stability!",
+            },
+          ],
+        },
+        links: {
+          viewContact: "I want to know more!",
         },
       },
     },

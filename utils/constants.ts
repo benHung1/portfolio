@@ -1,24 +1,23 @@
-// 連結 ID 常數
 export const LINK_IDS = {
   VIEW_SKILLS: "view-skills",
   VIEW_EXPERIENCE: "view-experience",
   VIEW_PORTFOLIO: "view-portfolio",
   VIEW_CONTACT: "view-contact",
+  VIEW_REVIEWS: "view-reviews",
   RESUME_1111: "resume-1111",
   RESUME_104: "resume-104",
   RESUME_CAKERESUME: "resume-cakeresume",
 } as const;
 
-// 行星 ID 常數
 export const PLANET_IDS = {
   EARTH: "earth",
   MERCURY: "mercury",
   MARS: "mars",
   SATURN: "saturn",
   CONTACT: "contact",
+  REVIEWS: "reviews",
 } as const;
 
-// 動畫常數
 export const ANIMATION_CONFIG = {
   PANEL_ENTER: {
     opacity: 0,
@@ -54,20 +53,12 @@ export const ANIMATION_CONFIG = {
   },
 } as const;
 
-// 預覽框配置
 export const PREVIEW_CONFIG = {
   OFFSET_X: 30,
   OFFSET_Y: 30,
   WIDTH: 320, // w-80
-  HEIGHT: 300, // 估算高度
+  HEIGHT: 300,
 } as const;
-
-
-
-
-
-
-
 
 
 

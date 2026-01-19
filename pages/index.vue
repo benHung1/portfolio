@@ -1,10 +1,8 @@
 <script setup lang="ts">
-// Imports
 import { ref } from "vue";
 import MenuScene from "@/components/MenuScene.vue";
 import LandingPage from "@/components/LandingPage.vue";
 
-// Constants
 const menuItems = [
   { id: "home", label: "Home", path: "/" },
   { id: "about", label: "About", path: "/about" },
@@ -16,19 +14,15 @@ const selectedItem = ref<string | null>(null);
 const showLanding = ref(true);
 const showScene = ref(false);
 
-// Functions
 const handleSelect = (item: string) => {
   selectedItem.value = item;
 };
 
 const handleStart = () => {
-  // 立即在背景開始加載 MenuScene（但先隱藏）
   showScene.value = true;
 };
 
 const handleSceneReady = () => {
-  // 當 MenuScene 準備好後，等待至少 3 秒讓動畫執行
-  // 然後才隱藏 LandingPage，確保動畫有足夠時間展示
   setTimeout(() => {
     showLanding.value = false;
   }, 3000);
@@ -37,12 +31,10 @@ const handleSceneReady = () => {
 
 <template>
   <div class="page-container">
-    <!-- 入口畫面 -->
     <Transition name="fade">
       <LandingPage v-if="showLanding" @start="handleStart" />
     </Transition>
 
-    <!-- 3D Scene - Full Screen -->
     <div
       v-if="showScene"
       class="scene-container"

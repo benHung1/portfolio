@@ -86,7 +86,7 @@ export const planetContents: Record<string, PlanetContent> = {
       { label: "類型", value: "Web App, 3D, Mobile" },
       { label: "狀態", value: "持續更新中" },
     ],
-    links: [{ id: "view-contact", label: "我想要了解更多！", url: "/contact" }],
+    links: [{ id: "view-reviews", label: "看看他的評價！", url: "/reviews" }],
     projects: [
       {
         title: "各子專區",
@@ -140,7 +140,7 @@ export const planetContents: Record<string, PlanetContent> = {
     ],
     coreValues: [
       "薪資期望：月薪 90,000+ 以上，年薪 120 萬以上",
-      "工作模式：一個月最少有一天遠端或彈性工作",
+      "工作模式：全遠端或者一週至少有一天遠端或彈性上班",
       "上下班時間：彈性上下班",
     ],
     links: [
@@ -162,6 +162,48 @@ export const planetContents: Record<string, PlanetContent> = {
       },
     ],
   },
+  reviews: {
+    id: "reviews",
+    title: "主管＆同事評價",
+    subtitle: "Reviews & Feedback",
+    description:
+      "來自主管與同事的真實評價，展現我在團隊中的表現與價值。",
+    color: "#90ee90",
+    quote: "團隊合作，共同成長",
+    advantages: {
+      supervisors: [
+        {
+          name: "林啟軒",
+          role: "數位商務部 專案經理",
+          avatar: "/cutie.png",
+          content: "從整天面對程式碼的工程師，跨足到瞬息萬變的零售業，啟軒坦言初期在門市歷練時曾面臨不小的文化衝擊與適應期。",
+        },
+        {
+          name: "陳大華",
+          role: "技術總監",
+          avatar: "/cutie.png",
+          content: "責任感強，對專案品質要求高，能夠確保專案按時交付且品質優良。是團隊中值得信賴的夥伴。",
+        },
+      ],
+      colleagues: [
+        {
+          name: "張小明",
+          role: "前端團隊 Lead",
+          avatar: "/cutie.png",
+          content: "技術能力強，能夠快速解決複雜問題，並提供優雅的解決方案。在團隊中總是能提出創新的想法。",
+        },
+        {
+          name: "王美麗",
+          role: "產品經理",
+          avatar: "/cutie.png",
+          content: "溝通能力佳，能夠清楚表達技術概念，協助團隊成員理解與學習。與產品團隊的協作非常順暢。",
+        },
+      ],
+    },
+    links: [
+      { id: "view-contact", label: "我想要了解更多！", url: "/contact" },
+    ],
+  },
 };
 
 // 根據 menuItem id 獲取內容
@@ -177,6 +219,7 @@ export const getPlanetContent = (
     about: PLANET_IDS.MERCURY, // about 對應技能專長 (mercury)
     projects: PLANET_IDS.MARS, // projects 對應工作經歷 (mars)
     contact: PLANET_IDS.SATURN, // contact menuItem 對應作品展示 (saturn)
+    reviews: PLANET_IDS.REVIEWS, // reviews 對應主管＆同事評價
   };
 
   // 如果 id 已經是有效的 planetId（在 planetContents 中存在），直接使用
@@ -218,7 +261,10 @@ export const getPlanetContent = (
   }
 
   // 構建 details
-  if (t.details && baseContent.details) {
+  if (t.details && "details" in baseContent && baseContent.details) {
+    const baseContentWithDetails = baseContent as PlanetContent & {
+      details: NonNullable<PlanetContent["details"]>;
+    };
     switch (planetId) {
       case "earth":
         if ("position" in t.details) {
@@ -268,7 +314,13 @@ export const getPlanetContent = (
 
   // 構建 advantages
   if ("advantages" in t && t.advantages) {
-    content.advantages = [...t.advantages];
+    // 如果是數組，直接複製
+    if (Array.isArray(t.advantages)) {
+      content.advantages = [...t.advantages];
+    } else if (typeof t.advantages === "object" && "supervisors" in t.advantages && "colleagues" in t.advantages) {
+      // 如果是主管/同事評價對象，直接複製
+      content.advantages = { ...t.advantages };
+    }
   }
 
   // 構建 coreValues

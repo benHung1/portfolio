@@ -15,6 +15,7 @@ import type { PlanetContent } from "~/types/planetContent";
 // @ts-ignore: Unable to resolve module '~/data/planetContents'
 import { getPlanetContent } from "~/data/planetContents";
 import PlanetInfoPanel from "./PlanetInfoPanel.vue";
+import MobileWarning from "./MobileWarning.vue";
 import { useI18n } from "@/composables/useI18n";
 import { useDevice } from "@/composables/useDevice";
 import { PLANET_IDS } from "@/utils/constants";
@@ -33,14 +34,16 @@ const props = defineProps<{
 // Constants
 const containerRef = ref<HTMLElement | null>(null);
 const { t, setLocale, locale } = useI18n();
-const { width: deviceWidth, height: deviceHeight } = useDevice();
+const { width: deviceWidth, height: deviceHeight, isMobile } = useDevice();
 const showLanguageDropdown = ref(false);
 const languageDropdownRef = ref<HTMLElement | null>(null);
+const showNavDropdown = ref(false);
+const navDropdownRef = ref<HTMLElement | null>(null);
 const selectedContent = ref<PlanetContent | null>(null);
 const isPanelVisible = computed(() => selectedContent.value !== null);
 const panelPosition = ref({ x: 0, y: 0 });
 const smoothedPanelPosition = ref({ x: 0, y: 0 });
-const planetOrder = ["earth", "mercury", "mars", "saturn", "contact"] as const;
+const planetOrder = ["earth", "mercury", "mars", "saturn", "reviews", "contact"] as const;
 
 const navItems = computed(() => {
   const translations = t.value;
@@ -49,6 +52,7 @@ const navItems = computed(() => {
     { id: PLANET_IDS.MERCURY, label: translations.nav.skills },
     { id: PLANET_IDS.MARS, label: translations.nav.experience },
     { id: PLANET_IDS.SATURN, label: translations.nav.portfolio },
+    { id: PLANET_IDS.REVIEWS, label: translations.nav.reviews },
     { id: PLANET_IDS.CONTACT, label: translations.nav.contact },
   ];
 });
@@ -79,7 +83,6 @@ const EARTH_TEXTURE_URLS = {
   clouds: "https://threejs.org/examples/textures/planets/earth_clouds_2048.png",
 };
 
-// Functions
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as Node;
   if (
@@ -87,6 +90,12 @@ const handleClickOutside = (event: MouseEvent) => {
     !languageDropdownRef.value.contains(target)
   ) {
     showLanguageDropdown.value = false;
+  }
+  if (
+    navDropdownRef.value &&
+    !navDropdownRef.value.contains(target)
+  ) {
+    showNavDropdown.value = false;
   }
 };
 
@@ -96,31 +105,35 @@ const getCurrentPlanetIndex = () => {
 };
 
 const navigateToPlanet = (planetId: string) => {
-  // 先更新內容（無論是否找到球體都要設置）
   const content = getPlanetContent(planetId, locale.value);
   if (!content) {
     console.error("Failed to get content for planetId:", planetId);
     return;
   }
 
-  // 設置內容，這會打開面板
   selectedContent.value = content;
 
-  // 找到對應的球
   let targetSphere: THREE.Mesh | null = null;
 
-  // 先檢查是否是地球
   if (planetId === PLANET_IDS.EARTH && centralSun) {
     targetSphere = centralSun;
   } else {
-    // 查找其他行星
     switch (planetId) {
-      case PLANET_IDS.CONTACT:
-        // 聯絡資訊對應到手動創建的球體（index === 4，因為是第 5 個球體）
+      case PLANET_IDS.REVIEWS:
         targetSphere =
           spheres.find((sphere) => {
             return (
               sphere.userData.index === 4 ||
+              sphere.userData.planetId === PLANET_IDS.REVIEWS
+            );
+          }) || null;
+        break;
+      case PLANET_IDS.CONTACT:
+        // 聯絡資訊對應到手動創建的球體（index === 5，因為是第 6 個球體，最後一個）
+        targetSphere =
+          spheres.find((sphere) => {
+            return (
+              sphere.userData.index === 5 ||
               sphere.userData.planetId === PLANET_IDS.CONTACT
             );
           }) || null;
@@ -208,19 +221,16 @@ const createStarfield = (): StarfieldPoints => {
   const colors: number[] = [];
 
   for (let i = 0; i < particleCount; i++) {
-    // 隨機分佈在更大的範圍內
     const x = (Math.random() - 0.5) * 5000;
     const y = (Math.random() - 0.5) * 5000;
     const z = (Math.random() - 0.5) * 5000;
 
     positions.push(x, y, z);
 
-    // 大部分是白色/淡藍色星星，少數彩色
     let color: THREE.Color;
     const brightness = Math.random();
 
     if (brightness > 0.98) {
-      // 2% 的亮星（白色/淡藍色）
       const whiteBrightness = 0.9 + Math.random() * 0.1;
       color = new THREE.Color(
         whiteBrightness,
@@ -228,7 +238,6 @@ const createStarfield = (): StarfieldPoints => {
         whiteBrightness + 0.1
       );
     } else if (brightness > 0.95) {
-      // 3% 的較亮星星
       const whiteBrightness = 0.7 + Math.random() * 0.2;
       color = new THREE.Color(
         whiteBrightness,
@@ -236,12 +245,10 @@ const createStarfield = (): StarfieldPoints => {
         whiteBrightness + 0.1
       );
     } else if (brightness > 0.9) {
-      // 5% 的彩色星星（藍色/青色）
-      const hue = 0.5 + Math.random() * 0.2; // 藍色到青色
+      const hue = 0.5 + Math.random() * 0.2;
       color = new THREE.Color().setHSL(hue, 0.6, 0.7 + Math.random() * 0.3);
     } else {
-      // 90% 的普通星星（白色/淡藍色，不同亮度，但更亮）
-      const starBrightness = 0.4 + Math.random() * 0.5; // 提高最低亮度
+      const starBrightness = 0.4 + Math.random() * 0.5;
       color = new THREE.Color(
         starBrightness,
         starBrightness,
@@ -259,7 +266,6 @@ const createStarfield = (): StarfieldPoints => {
   );
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 
-  // 創建圓形紋理來避免方形
   const canvas = document.createElement("canvas");
   canvas.width = 64;
   canvas.height = 64;
@@ -278,12 +284,11 @@ const createStarfield = (): StarfieldPoints => {
 
   const texture = new THREE.CanvasTexture(canvas);
 
-  // 使用帶有圓形紋理的 PointsMaterial
   const material = new THREE.PointsMaterial({
-    size: 2, // 增加尺寸，讓星星更明顯
+    size: 2,
     vertexColors: true,
     transparent: true,
-    opacity: 1, // 完全不透明
+    opacity: 1,
     sizeAttenuation: true,
     map: texture,
     alphaTest: 0.01,
@@ -294,7 +299,6 @@ const createStarfield = (): StarfieldPoints => {
   return mesh;
 };
 
-// 創建夜間紋理備用（深色背景，模擬城市燈光）
 const createNightTextureFallback = (
   size: number = 2048
 ): THREE.CanvasTexture => {
@@ -339,40 +343,32 @@ const createNightTextureFallback = (
   return texture;
 };
 
-// 創建真實的中央地球（參考 Earth 範例，使用真實紋理）
 const createCentralSun = (): THREE.Mesh => {
   const earthRadius = 1.2;
   const geometry = new THREE.SphereGeometry(earthRadius, 128, 128);
 
-  // 使用 TextureLoader 加載真實地球紋理
   const textureLoader = new THREE.TextureLoader();
 
-  // 先創建備用夜間紋理（作為默認值，避免 404 錯誤）
   let nightTexture: THREE.Texture = createNightTextureFallback(2048);
   nightTexture.colorSpace = THREE.SRGBColorSpace;
   nightTexture.anisotropy = 16;
 
-  // 嘗試從 URL 加載夜間紋理（如果成功則替換備用紋理）
   textureLoader.load(
     EARTH_TEXTURE_URLS.night,
     (loadedTexture) => {
-      // 加載成功，替換備用紋理
       loadedTexture.colorSpace = THREE.SRGBColorSpace;
       loadedTexture.anisotropy = 16;
       nightTexture = loadedTexture;
-      // 更新 shader uniform（如果 material 已創建）
       if (earthMaterial && earthMaterial.uniforms) {
         earthMaterial.uniforms.nightTexture.value = nightTexture;
       }
     },
     undefined,
     () => {
-      // 加載失敗，保持使用備用紋理（不顯示警告，因為已經有備用）
       console.warn("無法加載地球夜間紋理，使用備用紋理");
     }
   );
 
-  // 創建地球紋理（使用真實 URL，失敗時使用備用）
   const dayTexture = textureLoader.load(
     EARTH_TEXTURE_URLS.day,
     () => {}, // onLoad
@@ -385,7 +381,6 @@ const createCentralSun = (): THREE.Mesh => {
   dayTexture.colorSpace = THREE.SRGBColorSpace;
   dayTexture.anisotropy = 16;
 
-  // 創建組合的凹凸/粗糙度/雲層紋理
   const bumpTexture = textureLoader.load(
     EARTH_TEXTURE_URLS.bump,
     () => {},
@@ -396,10 +391,6 @@ const createCentralSun = (): THREE.Mesh => {
   );
   bumpTexture.anisotropy = 16;
 
-  // 雲層紋理（不使用，因為已經在 createCombinedTexture 中程序生成）
-  // 不嘗試加載，避免 404 錯誤
-
-  // 創建組合紋理（R: bump, G: roughness, B: clouds）
   const createCombinedTexture = (): THREE.CanvasTexture => {
     const canvas = document.createElement("canvas");
     canvas.width = 2048;
@@ -416,16 +407,13 @@ const createCentralSun = (): THREE.Mesh => {
       const x = (i / 4) % 2048;
       const y = Math.floor(i / 4 / 2048);
 
-      // R: 凹凸（使用簡單的噪點）
       const bump = Math.sin(x * 0.01) * Math.sin(y * 0.01) * 0.5 + 0.5;
       data[i] = Math.min(255, bump * 255);
 
-      // G: 粗糙度（海洋光滑 0.3，陸地粗糙 0.7）
       const roughness =
         Math.sin(x * 0.005) * Math.sin(y * 0.005) > 0.2 ? 0.7 : 0.3;
       data[i + 1] = Math.min(255, roughness * 255);
 
-      // B: 雲層（使用噪點模擬）
       const cloud = Math.sin(x * 0.02 + y * 0.03) * 0.5 + 0.5;
       data[i + 2] = Math.min(255, cloud * 255);
 
@@ -484,21 +472,17 @@ const createCentralSun = (): THREE.Mesh => {
         vec3 normal = normalize(vNormal);
         float sunOrientation = dot(normal, normalize(sunDirection));
         
-        // 晝夜混合
         float dayStrength = smoothstep(-0.25, 0.5, sunOrientation);
         vec3 finalColor = mix(nightColor, dayColor, dayStrength);
         
-        // Fresnel 效果（用於大氣層）
         float fresnel = 1.0 - abs(dot(normalize(vViewDirection), normal));
         fresnel = pow(fresnel, 2.0);
         
-        // 大氣層顏色（根據太陽方向，主要是藍色）
         float atmosphereDayStrength = smoothstep(-0.5, 1.0, sunOrientation);
         vec3 atmosphereColor = mix(atmosphereTwilightColor, atmosphereDayColor, atmosphereDayStrength);
         float atmosphereMix = atmosphereDayStrength * pow(fresnel, 2.0);
         atmosphereMix = clamp(atmosphereMix, 0.0, 1.0);
         
-        // 混合藍色大氣層
         finalColor = mix(finalColor, atmosphereColor, atmosphereMix);
         
         gl_FragColor = vec4(finalColor, 1.0);
@@ -583,6 +567,84 @@ const createCentralSun = (): THREE.Mesh => {
 
   scene.add(earth);
   return earth;
+};
+
+// 創建帶有自定義顏色的行星紋理
+const createPlanetTextureWithColor = (
+  planetType: "mars" | "mercury" | "saturn" | "earth" | "venus",
+  size: number = 1024,
+  customColor: number
+): THREE.CanvasTexture => {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("無法獲取 canvas 2d context");
+  }
+
+  const customBaseColor = new THREE.Color(customColor);
+  const imageData = context.createImageData(size, size);
+  const data = imageData.data;
+
+  // 預生成多層噪點
+  const noiseLayers: number[][][] = [];
+  for (let layer = 0; layer < 4; layer++) {
+    const scale = Math.pow(2, layer);
+    noiseLayers[layer] = [];
+    for (let y = 0; y < size; y++) {
+      noiseLayers[layer][y] = [];
+      for (let x = 0; x < size; x++) {
+        noiseLayers[layer][y][x] = Math.random();
+      }
+    }
+  }
+
+  // 生成行星表面紋理
+  for (let i = 0; i < data.length; i += 4) {
+    const x = (i / 4) % size;
+    const y = Math.floor(i / 4 / size);
+
+    // 多層噪點混合
+    let noise = 0;
+    let weight = 1;
+    for (let layer = 0; layer < 4; layer++) {
+      const scale = Math.pow(2, layer);
+      const nx = Math.floor(x / scale) % size;
+      const ny = Math.floor(y / scale) % size;
+      noise += noiseLayers[layer][ny][nx] * weight;
+      weight *= 0.5;
+    }
+    noise /= 1 + 0.5 + 0.25 + 0.125;
+
+    // 添加大尺度特徵
+    const largeFeature = Math.sin(x * 0.02) * Math.sin(y * 0.02) * 0.3;
+    const mediumFeature = Math.sin(x * 0.1 + y * 0.08) * 0.2;
+    const smallFeature = Math.sin(x * 0.5 + y * 0.3) * 0.15;
+
+    const brightness =
+      0.6 + noise * 0.4 + largeFeature + mediumFeature + smallFeature;
+    const clampedBrightness = Math.max(0.3, Math.min(1.4, brightness));
+
+    const cloud = Math.sin(x * 0.05 + y * 0.05) * 0.2 + 0.8;
+    const swirl = Math.sin(x * 0.1 + y * 0.1) * 0.15 + 0.85;
+    const detail = noise * 0.2;
+    const color = customBaseColor.clone();
+    color.r *= clampedBrightness * (cloud * swirl + detail);
+    color.g *= clampedBrightness * (cloud * swirl * 0.9 + detail * 0.8);
+    color.b *= clampedBrightness * (cloud * swirl * 0.8 + detail * 0.7);
+
+    data[i] = Math.min(255, color.r * 255);
+    data[i + 1] = Math.min(255, color.g * 255);
+    data[i + 2] = Math.min(255, color.b * 255);
+    data[i + 3] = 255;
+  }
+
+  context.putImageData(imageData, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
 };
 
 // 創建軌道線（更粗，更明顯）
@@ -894,7 +956,7 @@ const createInteractiveSpheres = (): SphereMesh[] => {
   // 映射 menuItem 到對應的行星內容
   // menuItems: [home, about, projects, contact]
   // 對應: [earth(關於我), mercury(技能專長), mars(工作經歷), saturn(作品展示)]
-  // 注意：contact 星球是單獨創建的，不在 menuItems 中
+  // 注意：contact 和 reviews 星球是單獨創建的，不在 menuItems 中
   const menuItemToPlanetMap: Record<string, string> = {
     home: PLANET_IDS.EARTH, // earth - 關於我
     about: PLANET_IDS.MERCURY, // mercury - 技能專長
@@ -1081,7 +1143,8 @@ const onClick = (e: MouseEvent) => {
     target.closest(".project-preview") ||
     target.closest("nav") ||
     target.closest(".language-selector") ||
-    languageDropdownRef.value?.contains(target)
+    languageDropdownRef.value?.contains(target) ||
+    navDropdownRef.value?.contains(target)
   ) {
     return;
   }
@@ -1098,7 +1161,6 @@ const onClick = (e: MouseEvent) => {
     }
   }
 
-  // 加入其他行星
   spheres.forEach((sphere) => {
     allObjects.push(sphere);
     if (sphere.children) {
@@ -1109,18 +1171,15 @@ const onClick = (e: MouseEvent) => {
   const intersects = raycaster.intersectObjects(allObjects, true);
 
   if (intersects.length > 0) {
-    // 找到真正的球體（可能是點擊到球本身，或是球的子物體）
     let clickedObject = intersects[0].object;
     let sphere: SphereMesh | null = null;
 
-    // 如果點擊到的是球本身（包括地球）
     if (
       clickedObject.userData &&
       (clickedObject.userData.item || clickedObject.userData.isEarth)
     ) {
       sphere = clickedObject as SphereMesh;
     } else {
-      // 如果點擊到的是子物體（大氣層或 rim），找到父球體
       let parent = clickedObject.parent;
       while (parent) {
         if (
@@ -1135,7 +1194,6 @@ const onClick = (e: MouseEvent) => {
     }
 
     if (sphere && sphere.userData) {
-      // 處理地球
       if (sphere.userData.isEarth) {
         emit("select", "home");
         const content = getPlanetContent(PLANET_IDS.EARTH, locale.value);
@@ -1306,6 +1364,23 @@ const animate = () => {
       label.lookAt(camera.position);
     }
   });
+
+  // 更新評價星球標籤位置
+  const reviewsSphere = spheres.find(
+    (s) => s.userData.planetId === PLANET_IDS.REVIEWS
+  );
+  if (reviewsSphere && reviewsSphere.userData.label && camera) {
+    const label = reviewsSphere.userData.label as CSS3DObject;
+    const reviewsSphereRadius = (reviewsSphere as THREE.Mesh).geometry
+      ? ((reviewsSphere as THREE.Mesh).geometry as THREE.SphereGeometry)
+          .parameters.radius
+      : 1.6;
+    const localOffset = new THREE.Vector3(reviewsSphereRadius + 0.5, 0, 0);
+    const worldPosition = localOffset.clone();
+    worldPosition.applyMatrix4(reviewsSphere.matrixWorld);
+    label.position.copy(worldPosition);
+    label.lookAt(camera.position);
+  }
 
   // 更新聯絡星球標籤位置
   const contactSphere = spheres.find(
@@ -1593,9 +1668,106 @@ onMounted(() => {
   // 創建互動球體（圍繞地球運行）
   spheres = createInteractiveSpheres();
 
+  // 為評價創建額外的球體
+  const reviewsPlanetType = "venus";
+  const reviewsBaseColor = 0x90ee90; // 改為淡綠色，與聯絡資訊的紫色區別更明顯
+  const reviewsBaseSize = 0.8;
+  const reviewsSphereRadius = reviewsBaseSize * 1.6;
+
+  const reviewsGeometry = new THREE.SphereGeometry(
+    reviewsSphereRadius,
+    128,
+    128
+  );
+  // 為評價星球創建專屬的淡綠色紋理
+  const reviewsTexture = createPlanetTextureWithColor("venus", 1024, reviewsBaseColor);
+  const reviewsNormalMap = createNormalMap(1024);
+  const reviewsBumpMap = createBumpMap(1024);
+
+  const reviewsMaterial = new THREE.MeshStandardMaterial({
+    map: reviewsTexture,
+    normalMap: reviewsNormalMap,
+    bumpMap: reviewsBumpMap,
+    bumpScale: 0.03,
+    metalness: 0.0,
+    roughness: 1.0,
+  });
+
+  const reviewsSphere = new THREE.Mesh(
+    reviewsGeometry,
+    reviewsMaterial
+  ) as SphereMesh;
+  reviewsSphere.rotation.z = THREE.MathUtils.degToRad(45);
+
+  // 添加大氣層光暈
+  const reviewsAtmosphere = createAtmosphereGlow(
+    reviewsBaseColor,
+    reviewsSphereRadius
+  );
+  reviewsSphere.add(reviewsAtmosphere);
+
+  // 添加 Rim Light 效果
+  const reviewsRim = createRimLight(reviewsBaseColor, reviewsSphereRadius);
+  reviewsSphere.add(reviewsRim);
+
+  // 計算位置（第 5 個球體）
+  const reviewsIndex = 4;
+  const reviewsRadius = 5 + reviewsIndex * 2;
+  const reviewsAngle = (reviewsIndex / 6) * Math.PI * 2; // 6 個球體
+
+  reviewsSphere.position.x = Math.cos(reviewsAngle) * reviewsRadius;
+  reviewsSphere.position.y = Math.sin(reviewsAngle) * reviewsRadius * 0.5;
+  reviewsSphere.position.z = Math.sin(reviewsAngle * 0.7) * 0.5;
+
+  const reviewsDirection = reviewsIndex % 2 === 0 ? 1 : -1;
+  const reviewsSpeed = (0.1 + reviewsIndex * 0.05) * reviewsDirection;
+
+  reviewsSphere.userData = {
+    item: { id: "reviews", label: "Reviews", path: "/reviews" },
+    index: reviewsIndex,
+    radius: reviewsRadius,
+    initialAngle: reviewsAngle,
+    orbitSpeed: reviewsSpeed,
+    planetId: PLANET_IDS.REVIEWS,
+    atmosphere: reviewsAtmosphere,
+    rim: reviewsRim,
+  };
+
+  spheres.push(reviewsSphere);
+  scene.add(reviewsSphere);
+
+  // 為評價星球創建標籤
+  const reviewsLabelText =
+    navItems.value.find((nav) => nav.id === PLANET_IDS.REVIEWS)?.label ||
+    "主管＆同事評價";
+  const reviewsLabelElement = document.createElement("div");
+  reviewsLabelElement.className = "planet-label";
+  reviewsLabelElement.textContent = reviewsLabelText;
+  reviewsLabelElement.style.cssText = `
+    color: white;
+    font-size: 40px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    user-select: none;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  `;
+  const reviewsLabel = new CSS3DObject(reviewsLabelElement);
+  reviewsLabel.scale.set(0.01, 0.01, 0.01);
+  reviewsLabel.position.set(reviewsSphereRadius + 0.5, 0, 0);
+  reviewsSphere.userData.label = reviewsLabel;
+  planetLabels.push(reviewsLabel);
+  css3dScene.add(reviewsLabel);
+
   // 為聯絡資訊創建額外的球體
   const contactPlanetType = "venus";
-  const contactBaseColor = 0x9b59b6;
+  const contactBaseColor = 0x9b59b6; // 保持紫色
   const contactBaseSize = 0.8;
   const contactSphereRadius = contactBaseSize * 1.9; // 金星大小
 
@@ -1634,10 +1806,10 @@ onMounted(() => {
   const contactRim = createRimLight(contactBaseColor, contactSphereRadius);
   contactSphere.add(contactRim);
 
-  // 計算位置（第 5 個球體）
-  const contactIndex = 4;
+  // 計算位置（第 6 個球體，最後一個）
+  const contactIndex = 5;
   const contactRadius = 5 + contactIndex * 2;
-  const contactAngle = (contactIndex / 5) * Math.PI * 2; // 5 個球體
+  const contactAngle = (contactIndex / 6) * Math.PI * 2; // 6 個球體
 
   contactSphere.position.x = Math.cos(contactAngle) * contactRadius;
   contactSphere.position.y = Math.sin(contactAngle) * contactRadius * 0.5;
@@ -1809,6 +1981,20 @@ watch(
       }
     }
 
+    // 更新評價星球的標籤
+    const reviewsSphere = spheres.find(
+      (s) => s.userData.planetId === PLANET_IDS.REVIEWS
+    );
+    if (reviewsSphere && reviewsSphere.userData.label) {
+      const label = reviewsSphere.userData.label as CSS3DObject;
+      const newLabelText =
+        navItems.value.find((nav) => nav.id === PLANET_IDS.REVIEWS)?.label ||
+        "主管＆同事評價";
+      if (label.element && newLabelText) {
+        label.element.textContent = newLabelText;
+      }
+    }
+
     // 更新聯絡星球的標籤
     const contactSphere = spheres.find(
       (s) => s.userData.planetId === PLANET_IDS.CONTACT
@@ -1846,8 +2032,13 @@ watch([() => deviceWidth.value, () => deviceHeight.value], () => {
     ref="containerRef"
     class="w-full h-full fixed inset-0"
     style="min-height: 100vh">
-    <!-- 左上角控制區 -->
-    <div class="fixed top-6 left-6 z-50 flex flex-col gap-3">
+    <!-- 手機版提醒 -->
+    <MobileWarning />
+
+    <!-- 右上角控制區 -->
+    <div
+      class="fixed z-50 flex flex-col gap-3 right-[6px]"
+      :class="isMobile ? 'top-[3rem]' : 'top-6'">
       <!-- 語言下拉選單 -->
       <div ref="languageDropdownRef" class="relative">
         <button
@@ -1924,29 +2115,73 @@ watch([() => deviceWidth.value, () => deviceHeight.value], () => {
       </div>
 
       <!-- 導航選單 -->
-      <nav
-        class="bg-white/10 backdrop-blur-md rounded-xl border border-white/20 p-2 shadow-lg">
-        <ul class="flex flex-col gap-1">
-          <li v-for="item in navItems" :key="item.id">
-            <button
-              @click.stop="navigateToPlanet(item.id)"
-              :class="[
-                'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-left w-full',
-                selectedContent?.id === item.id
-                  ? 'bg-white/20 text-white shadow-md'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white',
-              ]"
-              :style="{
-                color:
-                  selectedContent?.id === item.id
-                    ? selectedContent?.color || '#fff'
-                    : undefined,
-              }">
-              {{ item.label }}
-            </button>
-          </li>
-        </ul>
-      </nav>
+      <div ref="navDropdownRef" class="relative">
+        <button
+          @click="showNavDropdown = !showNavDropdown"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 transition-all duration-200 text-white text-sm font-medium shadow-lg w-full">
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <span>{{ t.nav.navigation }}</span>
+          <svg
+            class="w-4 h-4 transition-transform duration-200 ml-auto"
+            :class="{ 'rotate-180': showNavDropdown }"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <!-- 下拉選單 -->
+        <Transition
+          enter-active-class="transition ease-out duration-100"
+          enter-from-class="transform opacity-0 scale-95"
+          enter-to-class="transform opacity-100 scale-100"
+          leave-active-class="transition ease-in duration-75"
+          leave-from-class="transform opacity-100 scale-100"
+          leave-to-class="transform opacity-0 scale-95">
+          <nav
+            v-if="showNavDropdown"
+            class="absolute top-full left-0 mt-2 w-full bg-white/10 backdrop-blur-md rounded-lg border border-white/20 shadow-lg overflow-hidden z-50 min-w-[160px]">
+            <ul class="flex flex-col">
+              <li v-for="item in navItems" :key="item.id">
+                <button
+                  @click.stop="
+                    navigateToPlanet(item.id);
+                    showNavDropdown = false;
+                  "
+                  :class="[
+                    'w-full px-4 py-2 text-sm text-left transition-all duration-200',
+                    selectedContent?.id === item.id
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
+                  ]"
+                  :style="{
+                    color:
+                      selectedContent?.id === item.id
+                        ? selectedContent?.color || '#fff'
+                        : undefined,
+                  }">
+                  {{ item.label }}
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </Transition>
+      </div>
     </div>
 
     <!-- 資訊面板 -->

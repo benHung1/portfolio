@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// Imports
 import { ref, watch, computed } from "vue";
 import { gsap } from "gsap";
 import type { PlanetContent } from "@/types/planetContent";
@@ -11,8 +10,10 @@ import {
 } from "@/utils/constants";
 import { getFileNameFromUrl, getLinkTarget, getLinkRel } from "@/utils/helpers";
 import { useI18n } from "@/composables/useI18n";
+import { Swiper, SwiperSlide } from "swiper/vue";
+import { Autoplay } from "swiper/modules";
+import type { Swiper as SwiperType } from "swiper";
 
-// Props & Emits
 const props = defineProps<{
   content: PlanetContent | null;
   visible: boolean;
@@ -26,7 +27,6 @@ const emit = defineEmits<{
   navigateTo: [planetId: string];
 }>();
 
-// Constants
 const { t } = useI18n();
 const panelRef = ref<HTMLElement | null>(null);
 const previewRef = ref<HTMLElement | null>(null);
@@ -52,13 +52,53 @@ const linkIdToPlanetIdMap: Record<string, string> = {
   [LINK_IDS.VIEW_EXPERIENCE]: PLANET_IDS.MARS,
   [LINK_IDS.VIEW_PORTFOLIO]: PLANET_IDS.SATURN,
   [LINK_IDS.VIEW_CONTACT]: PLANET_IDS.CONTACT,
+  [LINK_IDS.VIEW_REVIEWS]: PLANET_IDS.REVIEWS,
 };
 
-const advantagesTitle = computed(() => {
-  return props.content?.id === PLANET_IDS.CONTACT
-    ? t.value.panel.valueToCompany
-    : t.value.panel.advantages;
+const isSupervisorColleagueReviews = computed(() => {
+  if (!props.content?.advantages) return false;
+  return (
+    typeof props.content.advantages === "object" &&
+    !Array.isArray(props.content.advantages) &&
+    "supervisors" in props.content.advantages &&
+    "colleagues" in props.content.advantages
+  );
 });
+
+const supervisorReviews = computed(() => {
+  if (!isSupervisorColleagueReviews.value || !props.content?.advantages) return [];
+  const advantages = props.content.advantages as { supervisors: Array<{ name: string; role: string; avatar?: string; content: string }>; colleagues: Array<{ name: string; role: string; avatar?: string; content: string }> };
+  return advantages.supervisors || [];
+});
+
+const colleagueReviews = computed(() => {
+  if (!isSupervisorColleagueReviews.value || !props.content?.advantages) return [];
+  const advantages = props.content.advantages as { supervisors: Array<{ name: string; role: string; avatar?: string; content: string }>; colleagues: Array<{ name: string; role: string; avatar?: string; content: string }> };
+  return advantages.colleagues || [];
+});
+
+const swiperModules = [Autoplay];
+const supervisorSwiperRef = ref<{ swiper: SwiperType } | null>(null);
+const colleagueSwiperRef = ref<{ swiper: SwiperType } | null>(null);
+const earthColor = '#4db2ff';
+
+const pauseAutoplay = (type: 'supervisor' | 'colleague') => {
+  const swiper = type === 'supervisor' 
+    ? supervisorSwiperRef.value?.swiper 
+    : colleagueSwiperRef.value?.swiper;
+  if (swiper?.autoplay) {
+    swiper.autoplay.pause();
+  }
+};
+
+const resumeAutoplay = (type: 'supervisor' | 'colleague') => {
+  const swiper = type === 'supervisor' 
+    ? supervisorSwiperRef.value?.swiper 
+    : colleagueSwiperRef.value?.swiper;
+  if (swiper?.autoplay) {
+    swiper.autoplay.resume();
+  }
+};
 
 const coreValuesTitle = computed(() => {
   return props.content?.id === PLANET_IDS.CONTACT
@@ -66,11 +106,8 @@ const coreValuesTitle = computed(() => {
     : t.value.panel.coreValues;
 });
 
-const featuredProjectsTitle = computed(() => {
-  return t.value.panel.featuredProjects;
-});
+const featuredProjectsTitle = computed(() => t.value.panel.featuredProjects);
 
-// Functions
 const handleClose = () => {
   emit("close");
 };
@@ -79,39 +116,29 @@ const handleLinkClick = (
   link: { id?: string; label: string; url: string },
   event: MouseEvent
 ) => {
-  // 使用 id 來判斷導航邏輯，而不是 label
-  if (!link.id) {
-    // 如果沒有 id，保持原有行為（跳轉）
-    return;
-  }
+  if (!link.id) return;
 
-  // 特殊處理：view-skills 使用 next 而不是 navigateTo
   if (link.id === LINK_IDS.VIEW_SKILLS) {
     event.preventDefault();
     emit("next");
     return;
   }
 
-  // 根據 id 進行導航
   const planetId = linkIdToPlanetIdMap[link.id];
   if (planetId) {
     event.preventDefault();
     emit("navigateTo", planetId);
   }
 };
-
-// 處理作品項目 hover 效果
 const handleProjectHover = (event: MouseEvent, index: number) => {
   if (!props.content?.projects) return;
 
   const project = props.content.projects[index];
   if (!project) return;
 
-  // 計算初始位置（稍微偏移，避免遮擋滑鼠）
-  let targetX = event.clientX + PREVIEW_CONFIG.OFFSET_X;
-  let targetY = event.clientY + PREVIEW_CONFIG.OFFSET_Y;
+  const targetX = event.clientX + PREVIEW_CONFIG.OFFSET_X;
+  const targetY = event.clientY + PREVIEW_CONFIG.OFFSET_Y;
 
-  // 顯示預覽框
   previewState.value = {
     visible: true,
     x: targetX,
@@ -123,9 +150,7 @@ const handleProjectHover = (event: MouseEvent, index: number) => {
     },
   };
 
-  // 使用 GSAP 動畫顯示
   if (previewRef.value) {
-    // 先設置位置（使用 left 和 top）
     gsap.set(previewRef.value, {
       left: targetX,
       top: targetY,
@@ -133,48 +158,35 @@ const handleProjectHover = (event: MouseEvent, index: number) => {
       yPercent: -50,
     });
 
-    // 然後動畫顯示
     gsap.fromTo(
       previewRef.value,
-      {
-        opacity: 0,
-        scale: 0.8,
-      },
+      { opacity: 0, scale: 0.8 },
       ANIMATION_CONFIG.PREVIEW_SHOW
     );
   }
 };
 
 const handleProjectLeave = (event: MouseEvent) => {
-  // 檢查滑鼠是否移動到預覽框上
   if (previewRef.value) {
     const card = previewRef.value.querySelector(".preview-card") as HTMLElement;
     if (card) {
       const rect = card.getBoundingClientRect();
-      const x = event.clientX;
-      const y = event.clientY;
-
-      // 如果滑鼠在預覽框範圍內，不隱藏
       if (
-        x >= rect.left &&
-        x <= rect.right &&
-        y >= rect.top &&
-        y <= rect.bottom
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
       ) {
         return;
       }
     }
   }
-
-  // 隱藏預覽框
   hidePreview();
 };
 
-// 隱藏預覽框的函數
 const hidePreview = () => {
   if (previewRef.value) {
     const card = previewRef.value.querySelector(".preview-card") as HTMLElement;
-    // 先重置卡片位置
     if (card) {
       gsap.to(card, {
         x: 0,
@@ -186,7 +198,6 @@ const hidePreview = () => {
       });
     }
 
-    // 然後隱藏預覽框
     gsap.to(previewRef.value, {
       ...ANIMATION_CONFIG.PREVIEW_HIDE,
       onComplete: () => {
@@ -203,7 +214,6 @@ const hidePreview = () => {
 const handleProjectMove = (event: MouseEvent) => {
   if (!previewState.value.visible || !previewRef.value) return;
 
-  // 檢查滑鼠是否在預覽框上，如果是則不更新位置
   const card = previewRef.value.querySelector(".preview-card") as HTMLElement;
   if (card) {
     const cardRect = card.getBoundingClientRect();
@@ -213,21 +223,13 @@ const handleProjectMove = (event: MouseEvent) => {
       event.clientY >= cardRect.top &&
       event.clientY <= cardRect.bottom
     ) {
-      return; // 滑鼠在卡片上，不更新位置
+      return;
     }
   }
 
-  // 更新預覽框位置（稍微偏移，避免遮擋滑鼠）
   let targetX = event.clientX + PREVIEW_CONFIG.OFFSET_X;
   let targetY = event.clientY + PREVIEW_CONFIG.OFFSET_Y;
-
-  // 確保預覽框不會超出視窗邊界
-  const {
-    WIDTH: previewWidth,
-    HEIGHT: previewHeight,
-    OFFSET_X,
-    OFFSET_Y,
-  } = PREVIEW_CONFIG;
+  const { WIDTH: previewWidth, HEIGHT: previewHeight, OFFSET_X, OFFSET_Y } = PREVIEW_CONFIG;
 
   if (targetX + previewWidth / 2 > window.innerWidth) {
     targetX = event.clientX - OFFSET_X - previewWidth / 2;
@@ -245,7 +247,6 @@ const handleProjectMove = (event: MouseEvent) => {
   previewState.value.x = targetX;
   previewState.value.y = targetY;
 
-  // 使用 GSAP 平滑移動（更快的響應速度）
   gsap.to(previewRef.value, {
     left: targetX,
     top: targetY,
@@ -254,12 +255,7 @@ const handleProjectMove = (event: MouseEvent) => {
   });
 };
 
-const handlePreviewEnter = () => {
-  // 滑鼠進入預覽框時，啟用浮動效果
-};
-
 const handlePreviewLeave = () => {
-  // 滑鼠離開預覽框時，隱藏卡片
   hidePreview();
 };
 
@@ -273,35 +269,24 @@ const handlePreviewMove = (event: MouseEvent) => {
   const cardCenterX = rect.left + rect.width / 2;
   const cardCenterY = rect.top + rect.height / 2;
 
-  // 計算滑鼠相對於卡片中心的位置（-1 到 1）
   const mouseX = event.clientX - cardCenterX;
   const mouseY = event.clientY - cardCenterY;
-
   const relativeX = mouseX / (rect.width / 2);
   const relativeY = mouseY / (rect.height / 2);
 
-  // 計算浮動效果（最大移動 15px，最大旋轉 5 度）
   const maxMove = 15;
   const maxRotate = 5;
 
-  const moveX = relativeX * maxMove;
-  const moveY = relativeY * maxMove;
-  const rotateY = relativeX * maxRotate;
-  const rotateX = -relativeY * maxRotate; // 反向，讓效果更自然
-
-  // 應用 3D 變換
   gsap.to(card, {
-    x: moveX,
-    y: moveY,
-    rotateX: rotateX,
-    rotateY: rotateY,
+    x: relativeX * maxMove,
+    y: relativeY * maxMove,
+    rotateX: -relativeY * maxRotate,
+    rotateY: relativeX * maxRotate,
     duration: 0.3,
     ease: "power1.out",
     transformPerspective: 1000,
   });
 };
-
-// Watch
 watch(
   () => props.visible,
   (newVal) => {
@@ -315,7 +300,6 @@ watch(
   }
 );
 
-// 當內容變化時，淡出再淡入
 watch(
   () => props.content,
   (newContent, oldContent) => {
@@ -329,17 +313,14 @@ watch(
         },
       });
     }
-    // 內容變化時隱藏預覽卡片
     hidePreview();
   }
 );
 
-// 監聽面板可見性變化
 watch(
   () => props.visible,
   (newVal) => {
     if (!newVal) {
-      // 面板隱藏時，隱藏預覽卡片
       hidePreview();
     }
   }
@@ -504,32 +485,261 @@ watch(
 
           <!-- 我的優勢 -->
           <div
-            v-if="content.advantages && content.advantages.length > 0"
+            v-if="content.advantages && (isSupervisorColleagueReviews || (Array.isArray(content.advantages) && content.advantages.length > 0))"
             class="mb-4 sm:mb-6">
             <h3
               class="text-base sm:text-lg font-semibold mb-2 sm:mb-3 text-white"
               :style="{
                 color: content.color || '#fff',
               }">
-              {{ advantagesTitle }}
             </h3>
-            <div class="space-y-2">
-              <div
-                v-for="(advantage, index) in content.advantages"
-                :key="index"
-                class="relative pl-2 sm:pl-3 py-2 rounded-lg border-l-2"
-                :style="{
-                  borderColor: content.color || 'rgba(255,255,255,0.3)',
-                  backgroundColor: content.color
-                    ? `${content.color}08`
-                    : 'rgba(255,255,255,0.03)',
-                }">
-                <p
-                  class="text-gray-300 text-xs sm:text-sm leading-relaxed break-words">
-                  {{ advantage }}
-                </p>
+
+            <!-- 主管和同事評價（新格式） -->
+            <div v-if="isSupervisorColleagueReviews" class="space-y-4 sm:space-y-6">
+              <!-- 主管評價 -->
+              <div class="relative">
+                <h4 class="text-sm sm:text-base font-medium mb-2 text-white/80" :style="{ color: content.color || '#fff' }">
+                  {{ t.panel.supervisorReviews }}
+                </h4>
+                <div
+                  class="review-card-container relative overflow-hidden rounded-xl border"
+                  @mouseenter="pauseAutoplay('supervisor')"
+                  @mouseleave="resumeAutoplay('supervisor')"
+                  :style="{
+                    borderColor: content.color
+                      ? `${content.color}40`
+                      : 'rgba(255,255,255,0.2)',
+                    backgroundColor: content.color
+                      ? `${content.color}10`
+                      : 'rgba(255,255,255,0.05)',
+                    minHeight: 'auto',
+                  }">
+                  <div class="overflow-hidden w-full">
+                  <client-only>
+                    <template #default>
+                      <Swiper
+                        ref="supervisorSwiperRef"
+                        :modules="swiperModules"
+                        :slides-per-view="1"
+                        :space-between="0"
+                        :loop="supervisorReviews.length > 1"
+                        :autoplay="supervisorReviews.length > 1 ? {
+                          delay: 3000,
+                          disableOnInteraction: false,
+                          reverseDirection: false,
+                          pauseOnMouseEnter: true,
+                        } : false"
+                        :allow-touch-move="true"
+                        :grab-cursor="true"
+                        :simulate-touch="true"
+                        class="review-swiper">
+                        <SwiperSlide
+                          v-for="(review, index) in supervisorReviews"
+                          :key="index"
+                          class="p-4 sm:p-6">
+                          <div class="flex items-center gap-3 sm:gap-4 mb-4">
+                            <div
+                              class="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 flex-shrink-0"
+                              :style="{
+                                borderColor: content.color || 'rgba(255,255,255,0.3)',
+                              }">
+                              <img
+                                :src="review.avatar || '/cutie.png'"
+                                :alt="review.name"
+                                class="w-full h-full object-cover" />
+                            </div>
+                            <div class="flex-1 min-w-0">
+                              <h4 class="text-white font-semibold text-sm sm:text-base mb-1">
+                                {{ review.name }}
+                              </h4>
+                              <p
+                                class="text-gray-400 text-xs sm:text-sm truncate"
+                                :style="{
+                                  color: content.color
+                                    ? `${content.color}cc`
+                                    : 'rgba(255,255,255,0.6)',
+                                }">
+                                {{ review.role }}
+                              </p>
+                            </div>
+                          </div>
+                          <div class="relative flex flex-col justify-end gap-4">
+                            <p
+                              class="text-white text-xs sm:text-sm leading-relaxed"
+                            >
+                              {{ review.content }}
+                            </p>
+                          </div>
+                        </SwiperSlide>
+                      </Swiper>
+                    </template>
+                    <template #fallback>
+                      <div class="p-4 sm:p-6">
+                        <div class="flex items-center gap-3 sm:gap-4 mb-4">
+                          <div
+                            class="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 flex-shrink-0"
+                            :style="{
+                              borderColor: content.color || 'rgba(255,255,255,0.3)',
+                            }">
+                            <img
+                              :src="supervisorReviews[0]?.avatar || '/cutie.png'"
+                              :alt="supervisorReviews[0]?.name"
+                              class="w-full h-full object-cover" />
+                          </div>
+                          <div class="flex-1 min-w-0">
+                            <h4 class="text-white font-semibold text-sm sm:text-base mb-1">
+                              {{ supervisorReviews[0]?.name }}
+                            </h4>
+                            <p
+                              class="text-gray-400 text-xs sm:text-sm truncate"
+                              :style="{
+                                color: content.color
+                                  ? `${content.color}cc`
+                                  : 'rgba(255,255,255,0.6)',
+                              }">
+                              {{ supervisorReviews[0]?.role }}
+                            </p>
+                          </div>
+                        </div>
+                        <p
+                          class="text-gray-300 text-xs sm:text-sm leading-relaxed"
+                          :style="{
+                            color: content.color
+                              ? `${content.color}ee`
+                              : 'rgba(255,255,255,1)',
+                          }">
+                          {{ supervisorReviews[0]?.content }}
+                        </p>
+                      </div>
+                    </template>
+                  </client-only>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 同事評價 -->
+              <div class="relative">
+                <h4 class="text-sm sm:text-base font-medium mb-2 text-white/80" :style="{ color: content.color || '#fff' }">
+                  {{ t.panel.colleagueReviews }}
+                </h4>
+                <div
+                  class="review-card-container relative overflow-hidden rounded-xl border"
+                  @mouseenter="pauseAutoplay('colleague')"
+                  @mouseleave="resumeAutoplay('colleague')"
+                  :style="{
+                    borderColor: content.color
+                      ? `${content.color}40`
+                      : 'rgba(255,255,255,0.2)',
+                    backgroundColor: content.color
+                      ? `${content.color}10`
+                      : 'rgba(255,255,255,0.05)',
+                    minHeight: 'auto',
+                  }">
+                  <div class="overflow-hidden w-full">
+                  <client-only>
+                    <template #default>
+                      <Swiper
+                        ref="colleagueSwiperRef"
+                        :modules="swiperModules"
+                        :slides-per-view="1"
+                        :space-between="0"
+                        :loop="colleagueReviews.length > 1"
+                        :autoplay="colleagueReviews.length > 1 ? {
+                          delay: 3000,
+                          disableOnInteraction: false,
+                          reverseDirection: true,
+                          pauseOnMouseEnter: true,
+                        } : false"
+                        :allow-touch-move="true"
+                        :grab-cursor="true"
+                        :simulate-touch="true"
+                        class="review-swiper">
+                        <SwiperSlide
+                          v-for="(review, index) in colleagueReviews"
+                          :key="index"
+                          class="p-4 sm:p-6">
+                          <div class="flex items-center gap-3 sm:gap-4 mb-4">
+                            <div
+                              class="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 flex-shrink-0"
+                              :style="{
+                                borderColor: content.color || 'rgba(255,255,255,0.3)',
+                              }">
+                              <img
+                                :src="review.avatar || '/cutie.png'"
+                                :alt="review.name"
+                                class="w-full h-full object-cover" />
+                            </div>
+                            <div class="flex-1 min-w-0">
+                              <h4 class="text-white font-semibold text-sm sm:text-base mb-1">
+                                {{ review.name }}
+                              </h4>
+                              <p
+                                class="text-gray-400 text-xs sm:text-sm truncate"
+                                :style="{
+                                  color: content.color
+                                    ? `${content.color}cc`
+                                    : 'rgba(255,255,255,0.6)',
+                                }">
+                                {{ review.role }}
+                              </p>
+                            </div>
+                          </div>
+                          <div class="relative flex flex-col justify-end gap-4">
+                            <p
+                              class="text-white text-xs sm:text-sm leading-relaxed"
+                            >
+                              {{ review.content }}
+                            </p>
+                          </div>
+                        </SwiperSlide>
+                      </Swiper>
+                    </template>
+                    <template #fallback>
+                      <div class="p-4 sm:p-6">
+                        <div class="flex items-center gap-3 sm:gap-4 mb-4">
+                          <div
+                            class="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 flex-shrink-0"
+                            :style="{
+                              borderColor: content.color || 'rgba(255,255,255,0.3)',
+                            }">
+                            <img
+                              :src="colleagueReviews[0]?.avatar || '/cutie.png'"
+                              :alt="colleagueReviews[0]?.name"
+                              class="w-full h-full object-cover" />
+                          </div>
+                          <div class="flex-1 min-w-0">
+                            <h4 class="text-white font-semibold text-sm sm:text-base mb-1">
+                              {{ colleagueReviews[0]?.name }}
+                            </h4>
+                            <p
+                              class="text-gray-400 text-xs sm:text-sm truncate"
+                              :style="{
+                                color: content.color
+                                  ? `${content.color}cc`
+                                  : 'rgba(255,255,255,0.6)',
+                              }">
+                              {{ colleagueReviews[0]?.role }}
+                            </p>
+                          </div>
+                        </div>
+                        <p
+                          class="text-gray-300 text-xs sm:text-sm leading-relaxed"
+                          :style="{
+                            color: content.color
+                              ? `${content.color}ee`
+                              : 'rgba(255,255,255,1)',
+                          }">
+                          {{ colleagueReviews[0]?.content }}
+                        </p>
+                      </div>
+                    </template>
+                  </client-only>
+                  </div>
+                </div>
               </div>
             </div>
+
+
           </div>
 
           <!-- 我的核心價值 / 期望條件 -->
@@ -790,7 +1000,6 @@ watch(
           : '0 25px 80px rgba(0,0,0,0.9), 0 0 50px rgba(255,255,255,0.15)',
       }"
       @click.stop
-      @mouseenter="handlePreviewEnter"
       @mouseleave="handlePreviewLeave"
       @mousemove="handlePreviewMove">
       <!-- 圖片 -->
@@ -951,5 +1160,62 @@ watch(
     width: 1.25rem;
     height: 1.25rem;
   }
+}
+
+/* 評價卡片輪播動畫 */
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-enter-from {
+  opacity: 0;
+  transform: translateX(30px);
+}
+
+.slide-leave-to {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+
+.review-card-container {
+  position: relative;
+}
+
+/* Swiper 樣式覆蓋 */
+.review-swiper {
+  width: 100%;
+  overflow: hidden;
+}
+
+.review-swiper :deep(.swiper-wrapper) {
+  display: flex;
+}
+
+.review-swiper :deep(.swiper-slide) {
+  width: 100%;
+  flex-shrink: 0;
+  height: auto !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-swiper :deep(.swiper-wrapper) {
+  align-items: stretch;
+  height: auto !important;
+}
+
+.review-swiper :deep(.swiper) {
+  height: auto !important;
+}
+
+/* 限制文字行數並顯示省略號 */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>
