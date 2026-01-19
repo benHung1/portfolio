@@ -68,7 +68,9 @@ const updateButtonState = async () => {
   if (isAnimating.value) return;
   isLoading.value = true;
   isAnimating.value = true;
-  setTimeout(handleStart, 1000);
+  requestAnimationFrame(() => {
+    setTimeout(handleStart, 1000);
+  });
 };
 
 const handleStart = () => {
@@ -203,9 +205,11 @@ const startTyping = () => {
 
     const deleteChar = () => {
       if (charIndex > 0) {
-        typingText.value = currentLine.substring(0, charIndex - 1);
-        charIndex--;
-        typingTimer = window.setTimeout(deleteChar, 30);
+        requestAnimationFrame(() => {
+          typingText.value = currentLine.substring(0, charIndex - 1);
+          charIndex--;
+          typingTimer = window.setTimeout(deleteChar, 30);
+        });
       } else {
         currentLineIndex.value++;
 
@@ -219,9 +223,11 @@ const startTyping = () => {
 
         const typeChar = () => {
           if (nextCharIndex < nextLine.length) {
-            typingText.value = nextLine.substring(0, nextCharIndex + 1);
-            nextCharIndex++;
-            typingTimer = window.setTimeout(typeChar, 50); // 打字速度
+            requestAnimationFrame(() => {
+              typingText.value = nextLine.substring(0, nextCharIndex + 1);
+              nextCharIndex++;
+              typingTimer = window.setTimeout(typeChar, 50);
+            });
           } else {
             // 這一行打完，等待一下再刪除
             typingTimer = window.setTimeout(() => {
