@@ -353,21 +353,8 @@ const createCentralSun = (): THREE.Mesh => {
   nightTexture.colorSpace = THREE.SRGBColorSpace;
   nightTexture.anisotropy = 16;
 
-  textureLoader.load(
-    EARTH_TEXTURE_URLS.night,
-    (loadedTexture) => {
-      loadedTexture.colorSpace = THREE.SRGBColorSpace;
-      loadedTexture.anisotropy = 16;
-      nightTexture = loadedTexture;
-      if (earthMaterial && earthMaterial.uniforms) {
-        earthMaterial.uniforms.nightTexture.value = nightTexture;
-      }
-    },
-    undefined,
-    () => {
-      console.warn("無法加載地球夜間紋理，使用備用紋理");
-    }
-  );
+  // 不嘗試加載不存在的紋理，直接使用備用紋理
+  // 如果未來需要加載，可以在這裡添加加載邏輯
 
   const dayTexture = textureLoader.load(
     EARTH_TEXTURE_URLS.day,
@@ -1912,9 +1899,13 @@ onMounted(() => {
 
     // 如果設置了自動打開地球，則打開地球
     if (props.autoOpenEarth) {
-      setTimeout(() => {
-        navigateToPlanet(PLANET_IDS.EARTH);
-      }, 500); // 稍微延遲，確保場景已完全初始化
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            navigateToPlanet(PLANET_IDS.EARTH);
+          });
+        }, 500);
+      });
     }
   }, 100);
 });

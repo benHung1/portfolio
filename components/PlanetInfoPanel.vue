@@ -347,9 +347,9 @@ watch(
           : '0 20px 60px rgba(0,0,0,0.5)',
       }"
       @click.stop
-      @touchstart.stop
-      @touchmove.stop
-      @touchend.stop>
+      @touchstart.stop.passive
+      @touchmove.stop.passive
+      @touchend.stop.passive>
       <!-- 頂部裝飾條 -->
       <div
         class="h-1 w-full"
@@ -391,9 +391,9 @@ watch(
             touch-action: pan-y;
             overscroll-behavior: contain;
           "
-          @touchstart.stop
-          @touchmove.stop
-          @touchend.stop>
+          @touchstart.stop.passive
+          @touchmove.stop.passive
+          @touchend.stop.passive>
           <!-- 頭像（如果有） -->
           <div v-if="content.avatar" class="flex justify-center mb-4 sm:mb-6">
             <div
