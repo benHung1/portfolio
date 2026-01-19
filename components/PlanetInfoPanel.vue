@@ -465,7 +465,7 @@ watch(
             <div
               v-for="(detail, index) in content.details"
               :key="index"
-              class="flex justify-between items-center py-2 px-2 sm:px-3 rounded-lg border"
+              class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-3 py-2 px-2 sm:px-3 rounded-lg border"
               :style="{
                 borderColor: content.color
                   ? `${content.color}30`
@@ -474,10 +474,10 @@ watch(
                   ? `${content.color}05`
                   : 'rgba(255,255,255,0.02)',
               }">
-              <span class="text-gray-400 text-[10px] sm:text-xs">{{
+              <span class="text-gray-400 text-[10px] sm:text-xs flex-shrink-0 min-w-fit">{{
                 detail.label
               }}</span>
-              <span class="text-white font-medium text-xs sm:text-sm">{{
+              <span class="text-white font-medium text-xs sm:text-sm sm:text-right break-words flex-1">{{
                 detail.value
               }}</span>
             </div>
