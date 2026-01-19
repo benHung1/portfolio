@@ -1,409 +1,2208 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import * as THREE from 'three'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { gsap } from 'gsap'
+// Imports
+import { onMounted, onUnmounted, ref, computed, watch } from "vue";
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import {
+  CSS3DRenderer,
+  CSS3DObject,
+} from "three/addons/renderers/CSS3DRenderer.js";
+import { gsap } from "gsap";
+// @ts-ignore: Unable to resolve module '~/types/menuScene'
+import type { MenuItem, SphereMesh, StarfieldPoints } from "~/types/menuScene";
+// @ts-ignore: Unable to resolve module '~/types/planetContent'
+import type { PlanetContent } from "~/types/planetContent";
+// @ts-ignore: Unable to resolve module '~/data/planetContents'
+import { getPlanetContent } from "~/data/planetContents";
+import PlanetInfoPanel from "./PlanetInfoPanel.vue";
+import MobileWarning from "./MobileWarning.vue";
+import { useI18n } from "@/composables/useI18n";
+import { useDevice } from "@/composables/useDevice";
+import { PLANET_IDS } from "@/utils/constants";
 
-const emit = defineEmits(['select'])
+// Props & Emits
+const emit = defineEmits<{
+  select: [id: string];
+  ready: [];
+}>();
 
 const props = defineProps<{
-  menuItems: Array<{ id: string; label: string; path: string }>
-}>()
+  menuItems: readonly MenuItem[];
+  autoOpenEarth?: boolean;
+}>();
 
-const containerRef = ref<HTMLElement | null>(null)
+// Constants
+const containerRef = ref<HTMLElement | null>(null);
+const { t, setLocale, locale } = useI18n();
+const { width: deviceWidth, height: deviceHeight, isMobile } = useDevice();
+const showLanguageDropdown = ref(false);
+const languageDropdownRef = ref<HTMLElement | null>(null);
+const showNavDropdown = ref(false);
+const navDropdownRef = ref<HTMLElement | null>(null);
+const selectedContent = ref<PlanetContent | null>(null);
+const isPanelVisible = computed(() => selectedContent.value !== null);
+const panelPosition = ref({ x: 0, y: 0 });
+const smoothedPanelPosition = ref({ x: 0, y: 0 });
+const planetOrder = ["earth", "mercury", "mars", "saturn", "reviews", "contact"] as const;
 
-let scene: THREE.Scene
-let camera: THREE.PerspectiveCamera
-let renderer: THREE.WebGLRenderer
-let controls: OrbitControls
-let starfield: THREE.Points
-let centralSun: THREE.Mesh | null = null
-let orbitLines: THREE.Line[] = []
-let spheres: THREE.Mesh[] = []
-let raycaster: THREE.Raycaster
-const mouse = new THREE.Vector2()
-let animationId: number | null = null
-let orbitSpeed = 0.1
+const navItems = computed(() => {
+  const translations = t.value;
+  return [
+    { id: PLANET_IDS.EARTH, label: translations.nav.about },
+    { id: PLANET_IDS.MERCURY, label: translations.nav.skills },
+    { id: PLANET_IDS.MARS, label: translations.nav.experience },
+    { id: PLANET_IDS.SATURN, label: translations.nav.portfolio },
+    { id: PLANET_IDS.REVIEWS, label: translations.nav.reviews },
+    { id: PLANET_IDS.CONTACT, label: translations.nav.contact },
+  ];
+});
+
+// Three.js variables
+let scene: THREE.Scene;
+let camera: THREE.PerspectiveCamera;
+let renderer: THREE.WebGLRenderer;
+let css3dRenderer: CSS3DRenderer;
+let css3dScene: THREE.Scene;
+let controls: OrbitControls;
+let starfield: StarfieldPoints;
+let centralSun: THREE.Mesh | null = null;
+let dirLight: THREE.DirectionalLight | null = null;
+let spheres: SphereMesh[] = [];
+let planetLabels: CSS3DObject[] = [];
+let raycaster: THREE.Raycaster;
+const mouse = new THREE.Vector2();
+let animationId: number | null = null;
+const ORBIT_SPEED = 1.9;
+const clock = new THREE.Clock();
+let activeSphere: SphereMesh | null = null;
+
+const EARTH_TEXTURE_URLS = {
+  day: "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
+  night: "https://threejs.org/examples/textures/planets/earth_lights_2048.jpg",
+  bump: "https://threejs.org/examples/textures/planets/earth_normal_2048.jpg",
+  clouds: "https://threejs.org/examples/textures/planets/earth_clouds_2048.png",
+};
+
+const handleClickOutside = (event: MouseEvent) => {
+  const target = event.target as Node;
+  if (
+    languageDropdownRef.value &&
+    !languageDropdownRef.value.contains(target)
+  ) {
+    showLanguageDropdown.value = false;
+  }
+  if (
+    navDropdownRef.value &&
+    !navDropdownRef.value.contains(target)
+  ) {
+    showNavDropdown.value = false;
+  }
+};
+
+const getCurrentPlanetIndex = () => {
+  if (!selectedContent.value) return -1;
+  return planetOrder.indexOf(selectedContent.value.id);
+};
+
+const navigateToPlanet = (planetId: string) => {
+  const content = getPlanetContent(planetId, locale.value);
+  if (!content) {
+    console.error("Failed to get content for planetId:", planetId);
+    return;
+  }
+
+  selectedContent.value = content;
+
+  let targetSphere: THREE.Mesh | null = null;
+
+  if (planetId === PLANET_IDS.EARTH && centralSun) {
+    targetSphere = centralSun;
+  } else {
+    switch (planetId) {
+      case PLANET_IDS.REVIEWS:
+        targetSphere =
+          spheres.find((sphere) => {
+            return (
+              sphere.userData.index === 4 ||
+              sphere.userData.planetId === PLANET_IDS.REVIEWS
+            );
+          }) || null;
+        break;
+      case PLANET_IDS.CONTACT:
+        // 聯絡資訊對應到手動創建的球體（index === 5，因為是第 6 個球體，最後一個）
+        targetSphere =
+          spheres.find((sphere) => {
+            return (
+              sphere.userData.index === 5 ||
+              sphere.userData.planetId === PLANET_IDS.CONTACT
+            );
+          }) || null;
+        break;
+      default:
+        // 其他行星通過 planetId 查找
+        targetSphere =
+          spheres.find((sphere) => {
+            return sphere.userData.planetId === planetId;
+          }) || null;
+        break;
+    }
+  }
+
+  if (targetSphere) {
+    // 更新選中的球
+    if (activeSphere && activeSphere !== targetSphere) {
+      gsap.to(activeSphere.scale, {
+        x: 1,
+        y: 1,
+        z: 1,
+        duration: 0.3,
+        ease: "power2.out",
+      });
+    }
+
+    activeSphere = targetSphere as SphereMesh;
+
+    // 放大新選中的球
+    gsap.to(targetSphere.scale, {
+      x: 1.5,
+      y: 1.5,
+      z: 1.5,
+      duration: 0.5,
+      ease: "power2.out",
+    });
+
+    // 移動相機到新球的位置
+    if (camera) {
+      const targetPos = targetSphere.position.clone();
+      if (targetSphere.userData.isEarth) {
+        targetPos.z += 8;
+      } else {
+        targetPos.z += 8;
+      }
+
+      gsap.to(camera.position, {
+        x: targetPos.x,
+        y: targetPos.y,
+        z: targetPos.z,
+        duration: 1.0,
+        ease: "power2.inOut",
+        onUpdate: () => {
+          if (camera && activeSphere) {
+            camera.lookAt(activeSphere.position);
+          }
+        },
+      });
+    }
+  }
+};
+
+const switchPlanet = (direction: "next" | "prev") => {
+  const currentIndex = getCurrentPlanetIndex();
+  if (currentIndex === -1) return;
+
+  let newIndex: number;
+  switch (direction) {
+    case "next":
+      newIndex = (currentIndex + 1) % planetOrder.length;
+      break;
+    case "prev":
+      newIndex = (currentIndex - 1 + planetOrder.length) % planetOrder.length;
+      break;
+  }
+
+  const newPlanetId = planetOrder[newIndex];
+  navigateToPlanet(newPlanetId);
+};
 
 // 創建擬真星空背景
-function createStarfield(): THREE.Points {
-  const particleCount = 5000
-  const positions: number[] = []
-  const colors: number[] = []
-  const sizes: number[] = []
-  
+const createStarfield = (): StarfieldPoints => {
+  const particleCount = 1000000; //  100000 個星星
+  const positions: number[] = [];
+  const colors: number[] = [];
+
   for (let i = 0; i < particleCount; i++) {
-    // 隨機分佈在更大的範圍內
-    const x = (Math.random() - 0.5) * 2000
-    const y = (Math.random() - 0.5) * 2000
-    const z = (Math.random() - 0.5) * 2000
-    
-    positions.push(x, y, z)
-    
-    // 大部分是白色/淡藍色星星，少數彩色
-    let color: THREE.Color
-    const brightness = Math.random()
-    
-    if (brightness > 0.95) {
-      // 5% 的亮星（白色/淡藍色）
-      const whiteBrightness = 0.8 + Math.random() * 0.2
-      color = new THREE.Color(whiteBrightness, whiteBrightness, whiteBrightness + 0.1)
+    const x = (Math.random() - 0.5) * 5000;
+    const y = (Math.random() - 0.5) * 5000;
+    const z = (Math.random() - 0.5) * 5000;
+
+    positions.push(x, y, z);
+
+    let color: THREE.Color;
+    const brightness = Math.random();
+
+    if (brightness > 0.98) {
+      const whiteBrightness = 0.9 + Math.random() * 0.1;
+      color = new THREE.Color(
+        whiteBrightness,
+        whiteBrightness,
+        whiteBrightness + 0.1
+      );
+    } else if (brightness > 0.95) {
+      const whiteBrightness = 0.7 + Math.random() * 0.2;
+      color = new THREE.Color(
+        whiteBrightness,
+        whiteBrightness,
+        whiteBrightness + 0.1
+      );
     } else if (brightness > 0.9) {
-      // 5% 的彩色星星（藍色/青色）
-      const hue = 0.5 + Math.random() * 0.2 // 藍色到青色
-      color = new THREE.Color().setHSL(hue, 0.6, 0.7 + Math.random() * 0.3)
+      const hue = 0.5 + Math.random() * 0.2;
+      color = new THREE.Color().setHSL(hue, 0.6, 0.7 + Math.random() * 0.3);
     } else {
-      // 90% 的普通星星（白色/淡藍色，不同亮度）
-      const starBrightness = 0.3 + Math.random() * 0.5
-      color = new THREE.Color(starBrightness, starBrightness, starBrightness + 0.05)
+      const starBrightness = 0.4 + Math.random() * 0.5;
+      color = new THREE.Color(
+        starBrightness,
+        starBrightness,
+        starBrightness + 0.1
+      );
     }
-    
-    colors.push(color.r, color.g, color.b)
-    
-    // 不同大小的星星（亮星更大）
-    const size = brightness > 0.95 ? 2 + Math.random() * 2 : 0.5 + Math.random() * 1
-    sizes.push(size)
+
+    colors.push(color.r, color.g, color.b);
   }
-  
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
-  
-  // 使用簡單的 PointsMaterial，但調整參數避免方形
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("無法獲取 canvas 2d context");
+  }
+
+  const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.5, "rgba(255,255,255,0.5)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 64, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+
   const material = new THREE.PointsMaterial({
-    size: 1.5,
+    size: 2,
     vertexColors: true,
     transparent: true,
-    opacity: 0.9,
+    opacity: 1,
     sizeAttenuation: true,
-    alphaTest: 0.01, // 避免方形邊緣
-    map: null // 不使用紋理，使用默認圓形
-  })
-  
-  const mesh = new THREE.Points(geometry, material)
-  mesh.userData.rotationSpeed = 0.0001
-  return mesh
-}
+    map: texture,
+    alphaTest: 0.01,
+  });
 
-// 創建中央太陽
-function createCentralSun(): THREE.Mesh {
-  const geometry = new THREE.SphereGeometry(1.5, 64, 64)
-  const material = new THREE.MeshPhongMaterial({
-    color: 0xff6b35, // 橙色
-    emissive: 0xff6b35,
-    emissiveIntensity: 0.8,
-    shininess: 100
-  })
-  
-  const sun = new THREE.Mesh(geometry, material)
-  sun.position.set(0, 0, 0)
-  
-  // 添加光暈效果
-  const glowGeometry = new THREE.SphereGeometry(1.7, 64, 64)
-  const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff6b35,
-    transparent: true,
-    opacity: 0.3,
-    blending: THREE.AdditiveBlending
-  })
-  const glow = new THREE.Mesh(glowGeometry, glowMaterial)
-  sun.add(glow)
-  
-  scene.add(sun)
-  return sun
-}
+  const mesh = new THREE.Points(geometry, material) as StarfieldPoints;
+  mesh.userData.rotationSpeed = 0.0001;
+  return mesh;
+};
 
-// 創建軌道線
-function createOrbitLine(radius: number, color: number = 0x4d76cf): THREE.Line {
-  const points: THREE.Vector3[] = []
-  const segments = 64
-  
-  for (let i = 0; i <= segments; i++) {
-    const angle = (i / segments) * Math.PI * 2
-    const x = Math.cos(angle) * radius
-    const y = Math.sin(angle) * radius * 0.5 // 橢圓軌道
-    const z = 0
-    points.push(new THREE.Vector3(x, y, z))
+const createNightTextureFallback = (
+  size: number = 2048
+): THREE.CanvasTexture => {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("無法獲取 canvas 2d context");
   }
-  
-  const geometry = new THREE.BufferGeometry().setFromPoints(points)
-  const material = new THREE.LineBasicMaterial({
-    color: color,
+
+  const imageData = context.createImageData(size, size);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const x = (i / 4) % size;
+    const y = Math.floor(i / 4 / size);
+
+    // 深色背景（幾乎黑色）
+    const baseDark = 0.05;
+
+    // 模擬城市燈光（隨機分布的亮點）
+    const noise = Math.random();
+    const cityLight =
+      noise > 0.98 ? Math.min(1.0, baseDark + noise * 0.3) : baseDark;
+
+    // 添加一些微弱的噪點
+    const grain = (Math.random() - 0.5) * 0.02;
+
+    const brightness = Math.max(0, Math.min(1, cityLight + grain));
+
+    data[i] = brightness * 255 * 0.8; // R
+    data[i + 1] = brightness * 255 * 0.9; // G
+    data[i + 2] = brightness * 255; // B
+    data[i + 3] = 255; // A
+  }
+
+  context.putImageData(imageData, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+};
+
+const createCentralSun = (): THREE.Mesh => {
+  const earthRadius = 1.2;
+  const geometry = new THREE.SphereGeometry(earthRadius, 128, 128);
+
+  const textureLoader = new THREE.TextureLoader();
+
+  let nightTexture: THREE.Texture = createNightTextureFallback(2048);
+  nightTexture.colorSpace = THREE.SRGBColorSpace;
+  nightTexture.anisotropy = 16;
+
+  textureLoader.load(
+    EARTH_TEXTURE_URLS.night,
+    (loadedTexture) => {
+      loadedTexture.colorSpace = THREE.SRGBColorSpace;
+      loadedTexture.anisotropy = 16;
+      nightTexture = loadedTexture;
+      if (earthMaterial && earthMaterial.uniforms) {
+        earthMaterial.uniforms.nightTexture.value = nightTexture;
+      }
+    },
+    undefined,
+    () => {
+      console.warn("無法加載地球夜間紋理，使用備用紋理");
+    }
+  );
+
+  const dayTexture = textureLoader.load(
+    EARTH_TEXTURE_URLS.day,
+    () => {}, // onLoad
+    undefined, // onProgress
+    () => {
+      // onError - 使用備用紋理
+      console.warn("無法加載地球日間紋理，使用備用紋理");
+    }
+  );
+  dayTexture.colorSpace = THREE.SRGBColorSpace;
+  dayTexture.anisotropy = 16;
+
+  const bumpTexture = textureLoader.load(
+    EARTH_TEXTURE_URLS.bump,
+    () => {},
+    undefined,
+    () => {
+      console.warn("無法加載地球凹凸紋理");
+    }
+  );
+  bumpTexture.anisotropy = 16;
+
+  const createCombinedTexture = (): THREE.CanvasTexture => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 2048;
+    canvas.height = 2048;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("無法獲取 canvas 2d context");
+    }
+
+    const imageData = context.createImageData(2048, 2048);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const x = (i / 4) % 2048;
+      const y = Math.floor(i / 4 / 2048);
+
+      const bump = Math.sin(x * 0.01) * Math.sin(y * 0.01) * 0.5 + 0.5;
+      data[i] = Math.min(255, bump * 255);
+
+      const roughness =
+        Math.sin(x * 0.005) * Math.sin(y * 0.005) > 0.2 ? 0.7 : 0.3;
+      data[i + 1] = Math.min(255, roughness * 255);
+
+      const cloud = Math.sin(x * 0.02 + y * 0.03) * 0.5 + 0.5;
+      data[i + 2] = Math.min(255, cloud * 255);
+
+      data[i + 3] = 255;
+    }
+
+    context.putImageData(imageData, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  };
+
+  // 創建地球材質（參考 Earth 範例，改進版）
+  let earthMaterial: THREE.ShaderMaterial;
+  earthMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      dayTexture: { value: dayTexture },
+      nightTexture: { value: nightTexture },
+      sunDirection: { value: new THREE.Vector3(0, 0, 1) },
+      atmosphereDayColor: { value: new THREE.Color(0x4db2ff) },
+      atmosphereTwilightColor: { value: new THREE.Color(0xbc490b) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPosition;
+      varying vec3 vViewDirection;
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        vViewDirection = normalize(cameraPosition - vWorldPosition);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D dayTexture;
+      uniform sampler2D nightTexture;
+      uniform vec3 sunDirection;
+      uniform vec3 atmosphereDayColor;
+      uniform vec3 atmosphereTwilightColor;
+      
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPosition;
+      varying vec3 vViewDirection;
+      
+      void main() {
+        // 獲取紋理
+        vec3 dayColor = texture2D(dayTexture, vUv).rgb;
+        vec3 nightColor = texture2D(nightTexture, vUv).rgb;
+        
+        // 計算太陽方向（朝向太陽的強度）
+        vec3 normal = normalize(vNormal);
+        float sunOrientation = dot(normal, normalize(sunDirection));
+        
+        float dayStrength = smoothstep(-0.25, 0.5, sunOrientation);
+        vec3 finalColor = mix(nightColor, dayColor, dayStrength);
+        
+        float fresnel = 1.0 - abs(dot(normalize(vViewDirection), normal));
+        fresnel = pow(fresnel, 2.0);
+        
+        float atmosphereDayStrength = smoothstep(-0.5, 1.0, sunOrientation);
+        vec3 atmosphereColor = mix(atmosphereTwilightColor, atmosphereDayColor, atmosphereDayStrength);
+        float atmosphereMix = atmosphereDayStrength * pow(fresnel, 2.0);
+        atmosphereMix = clamp(atmosphereMix, 0.0, 1.0);
+        
+        finalColor = mix(finalColor, atmosphereColor, atmosphereMix);
+        
+        gl_FragColor = vec4(finalColor, 1.0);
+      }
+    `,
+    side: THREE.DoubleSide,
+  });
+
+  const earth = new THREE.Mesh(geometry, earthMaterial);
+  earth.position.set(0, 0, 0);
+
+  // 為地球添加 userData，讓它可以被點擊
+  earth.userData = {
+    item: {
+      id: "earth",
+      label: "Earth",
+      path: "/earth",
+    },
+    isEarth: true,
+  };
+
+  // 添加藍色大氣層效果
+  const atmosphereGeometry = new THREE.SphereGeometry(
+    earthRadius * 1.04,
+    128,
+    128
+  );
+  const atmosphereMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      sunDirection: { value: new THREE.Vector3(0, 0, 1) },
+      atmosphereDayColor: { value: new THREE.Color(0x4db2ff) }, // 藍色
+      atmosphereTwilightColor: { value: new THREE.Color(0x4db2ff) }, // 改為藍色，移除紅色邊框
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vWorldPosition;
+      varying vec3 vViewDirection;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        vViewDirection = normalize(cameraPosition - vWorldPosition);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 sunDirection;
+      uniform vec3 atmosphereDayColor;
+      uniform vec3 atmosphereTwilightColor;
+      
+      varying vec3 vNormal;
+      varying vec3 vWorldPosition;
+      varying vec3 vViewDirection;
+      
+      float remap(float oldMin, float oldMax, float newMin, float newMax, float value) {
+        return newMin + (value - oldMin) * (newMax - newMin) / (oldMax - oldMin);
+      }
+      
+      void main() {
+        vec3 normal = normalize(vNormal);
+        vec3 viewDir = normalize(vViewDirection);
+        
+        // 太陽方向
+        float sunOrientation = dot(normal, normalize(sunDirection));
+        float atmosphereDayStrength = smoothstep(-0.5, 1.0, sunOrientation);
+        
+        // 大氣層顏色（主要是藍色）
+        vec3 atmosphereColor = mix(atmosphereTwilightColor, atmosphereDayColor, atmosphereDayStrength);
+        
+        // Alpha 通道（移除邊框效果，設為完全透明）
+        float alpha = 0.0;
+        
+        gl_FragColor = vec4(atmosphereColor, alpha);
+      }
+    `,
+    side: THREE.BackSide,
     transparent: true,
-    opacity: 0.3,
-    linewidth: 1
-  })
-  
-  const line = new THREE.Line(geometry, material)
-  scene.add(line)
-  return line
-}
+    depthWrite: false,
+  });
+  const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+  earth.add(atmosphere);
+
+  scene.add(earth);
+  return earth;
+};
+
+// 創建帶有自定義顏色的行星紋理
+const createPlanetTextureWithColor = (
+  planetType: "mars" | "mercury" | "saturn" | "earth" | "venus",
+  size: number = 1024,
+  customColor: number
+): THREE.CanvasTexture => {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("無法獲取 canvas 2d context");
+  }
+
+  const customBaseColor = new THREE.Color(customColor);
+  const imageData = context.createImageData(size, size);
+  const data = imageData.data;
+
+  // 預生成多層噪點
+  const noiseLayers: number[][][] = [];
+  for (let layer = 0; layer < 4; layer++) {
+    const scale = Math.pow(2, layer);
+    noiseLayers[layer] = [];
+    for (let y = 0; y < size; y++) {
+      noiseLayers[layer][y] = [];
+      for (let x = 0; x < size; x++) {
+        noiseLayers[layer][y][x] = Math.random();
+      }
+    }
+  }
+
+  // 生成行星表面紋理
+  for (let i = 0; i < data.length; i += 4) {
+    const x = (i / 4) % size;
+    const y = Math.floor(i / 4 / size);
+
+    // 多層噪點混合
+    let noise = 0;
+    let weight = 1;
+    for (let layer = 0; layer < 4; layer++) {
+      const scale = Math.pow(2, layer);
+      const nx = Math.floor(x / scale) % size;
+      const ny = Math.floor(y / scale) % size;
+      noise += noiseLayers[layer][ny][nx] * weight;
+      weight *= 0.5;
+    }
+    noise /= 1 + 0.5 + 0.25 + 0.125;
+
+    // 添加大尺度特徵
+    const largeFeature = Math.sin(x * 0.02) * Math.sin(y * 0.02) * 0.3;
+    const mediumFeature = Math.sin(x * 0.1 + y * 0.08) * 0.2;
+    const smallFeature = Math.sin(x * 0.5 + y * 0.3) * 0.15;
+
+    const brightness =
+      0.6 + noise * 0.4 + largeFeature + mediumFeature + smallFeature;
+    const clampedBrightness = Math.max(0.3, Math.min(1.4, brightness));
+
+    const cloud = Math.sin(x * 0.05 + y * 0.05) * 0.2 + 0.8;
+    const swirl = Math.sin(x * 0.1 + y * 0.1) * 0.15 + 0.85;
+    const detail = noise * 0.2;
+    const color = customBaseColor.clone();
+    color.r *= clampedBrightness * (cloud * swirl + detail);
+    color.g *= clampedBrightness * (cloud * swirl * 0.9 + detail * 0.8);
+    color.b *= clampedBrightness * (cloud * swirl * 0.8 + detail * 0.7);
+
+    data[i] = Math.min(255, color.r * 255);
+    data[i + 1] = Math.min(255, color.g * 255);
+    data[i + 2] = Math.min(255, color.b * 255);
+    data[i + 3] = 255;
+  }
+
+  context.putImageData(imageData, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+};
+
+// 創建軌道線（更粗，更明顯）
+// 創建行星紋理（根據索引創建不同風格：火星、水星、土星等）
+const createPlanetTexture = (
+  planetType: "mars" | "mercury" | "saturn" | "earth" | "venus",
+  size: number = 1024
+): THREE.CanvasTexture => {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("無法獲取 canvas 2d context");
+  }
+
+  // 不同行星的基礎顏色
+  const planetColors: Record<
+    string,
+    { base: THREE.Color; variations: number[] }
+  > = {
+    mars: {
+      base: new THREE.Color(0xcd5c5c),
+      variations: [0.8, 0.9, 1.0, 1.1, 1.2],
+    },
+    mercury: {
+      base: new THREE.Color(0x8c7853),
+      variations: [0.7, 0.85, 1.0, 1.15],
+    },
+    saturn: { base: new THREE.Color(0xfad5a5), variations: [0.9, 1.0, 1.1] },
+    earth: {
+      base: new THREE.Color(0x4a90e2),
+      variations: [0.8, 0.9, 1.0, 1.1],
+    },
+    venus: {
+      base: new THREE.Color(0x9b59b6),
+      variations: [0.8, 0.9, 1.0, 1.1, 1.2],
+    },
+  };
+
+  const planet = planetColors[planetType] || planetColors.mars;
+  const imageData = context.createImageData(size, size);
+  const data = imageData.data;
+
+  // 預生成多層噪點
+  const noiseLayers: number[][][] = [];
+  for (let layer = 0; layer < 4; layer++) {
+    const scale = Math.pow(2, layer);
+    noiseLayers[layer] = [];
+    for (let y = 0; y < size; y++) {
+      noiseLayers[layer][y] = [];
+      for (let x = 0; x < size; x++) {
+        noiseLayers[layer][y][x] = Math.random();
+      }
+    }
+  }
+
+  // 生成行星表面紋理
+  for (let i = 0; i < data.length; i += 4) {
+    const x = (i / 4) % size;
+    const y = Math.floor(i / 4 / size);
+
+    // 多層噪點混合
+    let noise = 0;
+    let weight = 1;
+    for (let layer = 0; layer < 4; layer++) {
+      const scale = Math.pow(2, layer);
+      const nx = Math.floor(x / scale) % size;
+      const ny = Math.floor(y / scale) % size;
+      noise += noiseLayers[layer][ny][nx] * weight;
+      weight *= 0.5;
+    }
+    noise /= 1 + 0.5 + 0.25 + 0.125;
+
+    // 添加大尺度特徵
+    const largeFeature = Math.sin(x * 0.02) * Math.sin(y * 0.02) * 0.3;
+    const mediumFeature = Math.sin(x * 0.1 + y * 0.08) * 0.2;
+    const smallFeature = Math.sin(x * 0.5 + y * 0.3) * 0.15;
+
+    const brightness =
+      0.6 + noise * 0.4 + largeFeature + mediumFeature + smallFeature;
+    const clampedBrightness = Math.max(0.3, Math.min(1.4, brightness));
+
+    // 根據行星類型調整顏色和花紋
+    const color = planet.base.clone();
+    switch (planetType) {
+      case "mars": {
+        // 火星：紅色調，有火山和峽谷紋理
+        const volcano = Math.sin(x * 0.03) * Math.sin(y * 0.03) * 0.3;
+        const canyon = Math.sin(x * 0.08 + y * 0.12) * 0.2;
+        const detail = noise * 0.3;
+        color.r *= clampedBrightness * (0.9 + volcano + detail);
+        color.g *= clampedBrightness * (0.6 + canyon * 0.5 + detail * 0.3);
+        color.b *= clampedBrightness * (0.4 + detail * 0.2);
+        break;
+      }
+      case "mercury": {
+        // 水星：灰褐色，有密集的隕石坑和裂縫
+        const crater1 =
+          Math.sin(x * 0.15) * Math.sin(y * 0.15) > 0.7 ? 0.6 : 1.0;
+        const crater2 = Math.sin(x * 0.25 + y * 0.2) > 0.8 ? 0.7 : 1.0;
+        const crack = Math.abs(Math.sin(x * 0.2 + y * 0.3)) > 0.9 ? 0.8 : 1.0;
+        const crater = Math.min(crater1, crater2, crack);
+        color.r *= clampedBrightness * crater;
+        color.g *= clampedBrightness * crater;
+        color.b *= clampedBrightness * crater;
+        break;
+      }
+      case "saturn": {
+        // 土星：淡黃色，有明顯的橫向條紋和雲帶
+        const stripe1 = Math.sin(y * 0.03) * 0.15 + 1.0;
+        const stripe2 = Math.sin(y * 0.08) * 0.1 + 1.0;
+        const cloud = Math.sin(x * 0.05 + y * 0.02) * 0.05 + 1.0;
+        const stripe = stripe1 * stripe2 * cloud;
+        color.r *= clampedBrightness * stripe;
+        color.g *= clampedBrightness * stripe * 0.95;
+        color.b *= clampedBrightness * stripe * 0.85;
+        break;
+      }
+      case "venus": {
+        // 金星：紫色調，有雲層和漩渦紋理
+        const cloud = Math.sin(x * 0.05 + y * 0.05) * 0.2 + 0.8;
+        const swirl = Math.sin(x * 0.1 + y * 0.1) * 0.15 + 0.85;
+        const detail = noise * 0.2;
+        color.r *= clampedBrightness * (cloud * swirl + detail);
+        color.g *= clampedBrightness * (cloud * swirl * 0.7 + detail * 0.5);
+        color.b *= clampedBrightness * (cloud * swirl * 0.9 + detail * 0.7);
+        break;
+      }
+      default: {
+        // 地球：藍綠色，有陸地和海洋的紋理
+        const land = Math.sin(x * 0.04 + y * 0.06) * 0.3 + 0.7;
+        const ocean = Math.sin(x * 0.02) * Math.sin(y * 0.02) * 0.2 + 0.8;
+        const continent = Math.sin(x * 0.08 + y * 0.1) > 0.3 ? 1.2 : 1.0;
+        const mix = land * ocean * continent;
+        color.r *= clampedBrightness * mix * 0.6;
+        color.g *= clampedBrightness * mix * 0.8;
+        color.b *= clampedBrightness * mix;
+        break;
+      }
+    }
+
+    data[i] = Math.min(255, color.r * 255);
+    data[i + 1] = Math.min(255, color.g * 255);
+    data[i + 2] = Math.min(255, color.b * 255);
+    data[i + 3] = 255;
+  }
+
+  context.putImageData(imageData, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+};
+
+// 創建法線貼圖
+const createNormalMap = (size: number = 1024): THREE.CanvasTexture => {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("無法獲取 canvas 2d context");
+  }
+
+  const imageData = context.createImageData(size, size);
+  const data = imageData.data;
+
+  // 生成高度圖
+  const heightMap: number[][] = [];
+  for (let y = 0; y < size; y++) {
+    heightMap[y] = [];
+    for (let x = 0; x < size; x++) {
+      const h1 = Math.sin(x * 0.1) * Math.sin(y * 0.1) * 0.5;
+      const h2 = Math.sin(x * 0.05 + y * 0.03) * 0.3;
+      const h3 = Math.sin(x * 0.2 + y * 0.15) * 0.2;
+      const h4 = Math.random() * 0.2;
+      heightMap[y][x] = h1 + h2 + h3 + h4;
+    }
+  }
+
+  // 從高度圖生成法線貼圖
+  for (let i = 0; i < data.length; i += 4) {
+    const x = (i / 4) % size;
+    const y = Math.floor(i / 4 / size);
+
+    const h = heightMap[y][x];
+    const hx = heightMap[y][(x + 1) % size] - h;
+    const hy = heightMap[(y + 1) % size]?.[x] - h || 0;
+
+    // 法線向量
+    const strength = 2.0;
+    const nx = hx * strength * 0.5 + 0.5;
+    const ny = hy * strength * 0.5 + 0.5;
+    const len = Math.sqrt(nx * nx + ny * ny + 1);
+    const nz = 1.0 / len;
+
+    data[i] = Math.max(0, Math.min(255, (nx / len + 1) * 0.5 * 255));
+    data[i + 1] = Math.max(0, Math.min(255, (ny / len + 1) * 0.5 * 255));
+    data[i + 2] = Math.max(0, Math.min(255, (nz + 1) * 0.5 * 255));
+    data[i + 3] = 255;
+  }
+
+  context.putImageData(imageData, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+};
+
+// 創建 Bump 貼圖
+const createBumpMap = (size: number = 1024): THREE.CanvasTexture => {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("無法獲取 canvas 2d context");
+  }
+
+  const imageData = context.createImageData(size, size);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const x = (i / 4) % size;
+    const y = Math.floor(i / 4 / size);
+
+    const h1 = Math.sin(x * 0.1) * Math.sin(y * 0.1) * 0.5;
+    const h2 = Math.sin(x * 0.05 + y * 0.03) * 0.3;
+    const h3 = Math.random() * 0.2;
+    const height = h1 + h2 + h3;
+
+    const gray = Math.max(0, Math.min(255, (height + 1) * 0.5 * 255));
+    data[i] = gray;
+    data[i + 1] = gray;
+    data[i + 2] = gray;
+    data[i + 3] = 255;
+  }
+
+  context.putImageData(imageData, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+};
+
+// 創建大氣層光暈效果（使用 ShaderMaterial，類似火星範例）
+const createAtmosphereGlow = (
+  baseColor: number,
+  radius: number
+): THREE.Mesh => {
+  const glowGeometry = new THREE.SphereGeometry(radius * 1.01, 128, 128);
+  const color = new THREE.Color(baseColor);
+
+  const glowMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Vector3(color.r, color.g, color.b) },
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      varying vec3 vNormal;
+      void main() {
+        float intensity = pow(0.6 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.5);
+        gl_FragColor = vec4(uColor, 0.9) * intensity;
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+  });
+
+  return new THREE.Mesh(glowGeometry, glowMaterial);
+};
+
+// 創建 Rim Light 效果（邊緣光，模擬次表面散射）
+const createRimLight = (baseColor: number, radius: number): THREE.Mesh => {
+  const rimGeometry = new THREE.SphereGeometry(radius * 1.03, 64, 64);
+  const rimMaterial = new THREE.MeshBasicMaterial({
+    color: baseColor,
+    transparent: true,
+    opacity: 0.08,
+  });
+  return new THREE.Mesh(rimGeometry, rimMaterial);
+};
 
 // 創建互動球體（圍繞中央太陽運行）
-function createInteractiveSpheres(): THREE.Mesh[] {
-  const spheres: THREE.Mesh[] = []
-  const colors = [0x00ff88, 0x00ccff, 0xff6b6b, 0xffd93d]
-  
-  props.menuItems.forEach((item, index) => {
-    const geometry = new THREE.SphereGeometry(0.6, 32, 32)
-    const material = new THREE.MeshPhongMaterial({
-      color: colors[index % colors.length],
-      emissive: colors[index % colors.length],
-      emissiveIntensity: 0.6,
-      transparent: true,
-      opacity: 0.95,
-      shininess: 100
-    })
-    
-    const sphere = new THREE.Mesh(geometry, material)
-    
-    // 計算軌道半徑（不同距離）
-    const radius = 4 + index * 0.5
-    const angle = (index / props.menuItems.length) * Math.PI * 2
-    
+const createInteractiveSpheres = (): SphereMesh[] => {
+  const spheres: SphereMesh[] = [];
+  // 定義不同行星類型
+  const planetTypes: Array<"mars" | "mercury" | "saturn" | "earth" | "venus"> =
+    [
+      "mars",
+      "mercury",
+      "saturn",
+      "earth",
+      "venus", // 新增一個類型用於聯絡資訊
+    ];
+  const planetColors: number[] = [
+    0xcd5c5c, 0x8c7853, 0xfad5a5, 0x4a90e2, 0x9b59b6,
+  ]; // 火星、水星、土星、地球、紫色（聯絡資訊）
+
+  // 映射 menuItem 到對應的行星內容
+  // menuItems: [home, about, projects, contact]
+  // 對應: [earth(關於我), mercury(技能專長), mars(工作經歷), saturn(作品展示)]
+  // 注意：contact 和 reviews 星球是單獨創建的，不在 menuItems 中
+  const menuItemToPlanetMap: Record<string, string> = {
+    home: PLANET_IDS.EARTH, // earth - 關於我
+    about: PLANET_IDS.MERCURY, // mercury - 技能專長
+    projects: PLANET_IDS.MARS, // mars - 工作經歷
+    contact: PLANET_IDS.SATURN, // saturn - 作品展示
+  };
+
+  // 過濾掉 home，因為中央地球已經代表「關於我」了
+  const filteredMenuItems = props.menuItems.filter(
+    (item) => item.id !== "home"
+  );
+
+  filteredMenuItems.forEach((item, index) => {
+    // 根據真實行星大小比例設置半徑
+    // 水星(0.38) < 火星(0.53) < 地球(1.0) < 土星(9.5，但我們縮小到2.5)
+    const planetId = menuItemToPlanetMap[item.id] || "mars";
+    // 根據 planetId 選擇對應的行星類型
+    const planetTypeMap: Record<
+      string,
+      "mars" | "mercury" | "saturn" | "earth" | "venus"
+    > = {
+      earth: "earth",
+      mercury: "mercury",
+      mars: "mars",
+      saturn: "saturn",
+    };
+    const planetType =
+      planetTypeMap[planetId] || planetTypes[index % planetTypes.length];
+    const planetSizes: Record<string, number> = {
+      mercury: 0.38 * 2, // 水星最小，放大兩倍
+      mars: 0.53 * 2, // 火星中等，放大兩倍
+      earth: 1.0, // 地球標準
+      saturn: 2.5, // 土星最大（縮小版）
+      venus: 0.95 * 2, // 金星，放大兩倍
+    };
+    const baseSize = 0.8; // 基礎大小
+    const sphereRadius = baseSize * (planetSizes[planetType] || 1.0);
+
+    // 使用高精度幾何體（128分段，類似火星範例）
+    const geometry = new THREE.SphereGeometry(sphereRadius, 128, 128);
+
+    const baseColor = planetColors[index % planetColors.length];
+
+    // 創建紋理、法線貼圖和 bump 貼圖
+    const texture = createPlanetTexture(planetType, 1024);
+    const normalMap = createNormalMap(1024);
+    const bumpMap = createBumpMap(1024);
+
+    // 使用 MeshStandardMaterial（類似火星範例）
+    const material = new THREE.MeshStandardMaterial({
+      map: texture,
+      normalMap: normalMap,
+      bumpMap: bumpMap,
+      bumpScale: 0.03, // 類似火星範例
+      metalness: 0.0,
+      roughness: 1.0,
+    });
+
+    const sphere = new THREE.Mesh(geometry, material) as SphereMesh;
+
+    // 添加旋轉傾斜（類似火星的 25° 傾斜）
+    const tiltAngle = (index % 4) * 15; // 不同傾斜角度
+    sphere.rotation.z = THREE.MathUtils.degToRad(tiltAngle);
+
+    // 添加大氣層光暈（使用 ShaderMaterial）
+    const atmosphere = createAtmosphereGlow(baseColor, sphereRadius);
+    sphere.add(atmosphere);
+
+    // 添加 Rim Light 效果
+    const rim = createRimLight(baseColor, sphereRadius);
+    sphere.add(rim);
+
+    // 計算軌道半徑（間隔更大）
+    const radius = 5 + index * 2; //讓間隔更大
+    const angle = (index / filteredMenuItems.length) * Math.PI * 2;
+
     // 初始位置
-    sphere.position.x = Math.cos(angle) * radius
-    sphere.position.y = Math.sin(angle) * radius * 0.5
-    sphere.position.z = Math.sin(angle * 0.7) * 0.5 // 3D 深度
-    
-    sphere.userData = { 
-      item, 
-      index, 
+    sphere.position.x = Math.cos(angle) * radius;
+    sphere.position.y = Math.sin(angle) * radius * 0.5;
+    sphere.position.z = Math.sin(angle * 0.7) * 0.5; // 3D 深度
+
+    // 讓某些行星逆時針轉（奇數索引的行星逆時針）
+    const direction = index % 2 === 0 ? 1 : -1; // 偶數順時針，奇數逆時針
+    const speed = (0.1 + index * 0.05) * direction;
+
+    sphere.userData = {
+      item,
+      index,
       radius,
       initialAngle: angle,
-      orbitSpeed: 0.05 + index * 0.01 // 不同速度
+      orbitSpeed: speed, // 不同速度和方向，讓公轉更明顯
+      atmosphere,
+      rim,
+      planetId, // 儲存對應的行星 id
+    };
+
+    spheres.push(sphere);
+    scene.add(sphere);
+
+    // 創建星球標籤
+    const labelText =
+      navItems.value.find((nav) => nav.id === planetId)?.label || item.label;
+    const labelElement = document.createElement("div");
+    labelElement.className = "planet-label";
+    labelElement.textContent = labelText;
+    labelElement.style.cssText = `
+      color: white;
+      font-size: 40px;
+      font-weight: 600;
+      text-align: center;
+      white-space: nowrap;
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+      user-select: none;
+      padding: 6px 12px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 8px;
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    `;
+
+    const label = new CSS3DObject(labelElement);
+    label.scale.set(0.01, 0.01, 0.01);
+    // 標籤位置在星球右側，更貼近星球
+    label.position.set(sphereRadius + 0.5, 0, 0);
+
+    sphere.userData.label = label;
+    planetLabels.push(label);
+    css3dScene.add(label);
+  });
+
+  return spheres;
+};
+
+const onMouseMove = (e: MouseEvent) => {
+  if (!containerRef.value) return;
+  const rect = containerRef.value.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+};
+
+const handlePanelClose = () => {
+  if (activeSphere) {
+    // 恢復球的 scale
+    gsap.to(activeSphere.scale, {
+      x: 1,
+      y: 1,
+      z: 1,
+      duration: 0.5,
+      ease: "power2.out",
+    });
+
+    // 清除 activeSphere
+    activeSphere = null;
+
+    // 隱藏資訊面板
+    selectedContent.value = null;
+
+    // 相機回到初始位置
+    if (camera) {
+      gsap.to(camera.position, {
+        x: 8,
+        y: 4,
+        z: 8,
+        duration: 1.5,
+        ease: "power2.inOut",
+        onUpdate: () => {
+          if (camera) {
+            camera.lookAt(0, 0, 0);
+          }
+        },
+      });
     }
-    
-    // 創建軌道線
-    const orbitLine = createOrbitLine(radius, colors[index % colors.length])
-    orbitLines.push(orbitLine)
-    
-    spheres.push(sphere)
-    scene.add(sphere)
-  })
-  
-  return spheres
-}
+  }
+};
 
-function onMouseMove(e: MouseEvent) {
-  if (!containerRef.value) return
-  const rect = containerRef.value.getBoundingClientRect()
-  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-}
+const onClick = (e: MouseEvent) => {
+  if (!camera || !raycaster) return;
 
-function onClick() {
-  raycaster.setFromCamera(mouse, camera)
-  const intersects = raycaster.intersectObjects(spheres)
-  
+  // 檢查點擊是否在資訊面板、預覽框、導航選單或語言下拉選單上，如果是則不處理
+  const target = e.target as HTMLElement;
+  if (
+    target.closest(".planet-info-panel") ||
+    target.closest(".project-preview") ||
+    target.closest("nav") ||
+    target.closest(".language-selector") ||
+    languageDropdownRef.value?.contains(target) ||
+    navDropdownRef.value?.contains(target)
+  ) {
+    return;
+  }
+
+  raycaster.setFromCamera(mouse, camera);
+  // 需要檢測所有物體（包括子物體），然後找到真正的球
+  const allObjects: THREE.Object3D[] = [];
+
+  // 加入地球（centralSun）
+  if (centralSun) {
+    allObjects.push(centralSun);
+    if (centralSun.children) {
+      allObjects.push(...centralSun.children);
+    }
+  }
+
+  spheres.forEach((sphere) => {
+    allObjects.push(sphere);
+    if (sphere.children) {
+      allObjects.push(...sphere.children);
+    }
+  });
+
+  const intersects = raycaster.intersectObjects(allObjects, true);
+
   if (intersects.length > 0) {
-    const sphere = intersects[0].object as THREE.Mesh
-    if (sphere.userData.item) {
-      emit('select', sphere.userData.item.id)
-      
-      // 動畫效果
+    let clickedObject = intersects[0].object;
+    let sphere: SphereMesh | null = null;
+
+    if (
+      clickedObject.userData &&
+      (clickedObject.userData.item || clickedObject.userData.isEarth)
+    ) {
+      sphere = clickedObject as SphereMesh;
+    } else {
+      let parent = clickedObject.parent;
+      while (parent) {
+        if (
+          parent.userData &&
+          (parent.userData.item || parent.userData.isEarth)
+        ) {
+          sphere = parent as SphereMesh;
+          break;
+        }
+        parent = parent.parent;
+      }
+    }
+
+    if (sphere && sphere.userData) {
+      if (sphere.userData.isEarth) {
+        emit("select", "home");
+        const content = getPlanetContent(PLANET_IDS.EARTH, locale.value);
+        selectedContent.value = content;
+      } else if (sphere.userData.item) {
+        const itemId = sphere.userData.item.id;
+        emit("select", itemId);
+
+        // 獲取並顯示對應的內容
+        // 如果有 planetId，直接使用；否則使用 itemId
+        const planetId = sphere.userData.planetId || itemId;
+        const content = getPlanetContent(planetId, locale.value);
+        selectedContent.value = content;
+      }
+
+      // 步驟4：先實現簡單的放大效果
+      // 移除之前選中球的 active 效果
+      if (activeSphere && activeSphere !== sphere) {
+        gsap.to(activeSphere.scale, {
+          x: 1,
+          y: 1,
+          z: 1,
+          duration: 0.3,
+          ease: "power2.out",
+        });
+      }
+
+      // 設置新的 active 球
+      activeSphere = sphere;
+
+      // Active 效果：放大（先測試這個）
       gsap.to(sphere.scale, {
         x: 1.5,
         y: 1.5,
         z: 1.5,
-        duration: 0.3,
-        yoyo: true,
-        repeat: 1,
-        ease: 'power2.inOut'
-      })
+        duration: 0.5,
+        ease: "power2.out",
+      });
+
+      // 步驟5：相機移動（簡單版本）
+      if (camera) {
+        const targetPos = sphere.position.clone();
+        // 地球在中心，相機位置稍微不同
+        if (sphere.userData.isEarth) {
+          targetPos.z += 8; // 地球在中心，相機在正前方
+        } else {
+          targetPos.z += 8; // 其他行星，相機在球的前方
+        }
+
+        gsap.to(camera.position, {
+          x: targetPos.x,
+          y: targetPos.y,
+          z: targetPos.z,
+          duration: 1.5,
+          ease: "power2.inOut",
+          onUpdate: () => {
+            if (camera && activeSphere) {
+              camera.lookAt(activeSphere.position);
+            }
+          },
+        });
+      }
+    }
+  } else {
+    // 點擊空白處，清除 active 狀態，相機回到初始位置
+    if (activeSphere) {
+      // 恢復球的 scale
+      gsap.to(activeSphere.scale, {
+        x: 1,
+        y: 1,
+        z: 1,
+        duration: 0.5,
+        ease: "power2.out",
+      });
+
+      // 清除 activeSphere
+      activeSphere = null;
+
+      // 隱藏資訊面板
+      selectedContent.value = null;
+
+      // 相機回到初始位置
+      if (camera) {
+        gsap.to(camera.position, {
+          x: 8,
+          y: 4,
+          z: 8,
+          duration: 1.5,
+          ease: "power2.inOut",
+          onUpdate: () => {
+            if (camera) {
+              camera.lookAt(0, 0, 0);
+            }
+          },
+        });
+      }
     }
   }
-}
+};
 
-function animate() {
-  animationId = requestAnimationFrame(animate)
-  
-  const t = Date.now() * 0.001
+const animate = () => {
+  animationId = requestAnimationFrame(animate);
+
+  const dt = clock.getDelta();
+  const t = Date.now() * 0.001;
 
   // 緩慢旋轉銀河系（非常慢，減少頭暈）
   if (starfield) {
-    starfield.rotation.y += starfield.userData.rotationSpeed || 0.0001
+    starfield.rotation.y += starfield.userData.rotationSpeed;
   }
-  
-  // 旋轉中央太陽
+
+  // 旋轉中央地球（緩慢自轉）
   if (centralSun) {
-    centralSun.rotation.y += 0.002
-    centralSun.rotation.x += 0.001
+    centralSun.rotation.y += 0.002; // 地球自轉
+    // 更新中央地球標籤位置
+    if (centralSun.userData.label && camera) {
+      const label = centralSun.userData.label as CSS3DObject;
+      const earthRadius = 1.2;
+      const localOffset = new THREE.Vector3(earthRadius + 0.5, 0, 0);
+      const worldPosition = localOffset.clone();
+      worldPosition.applyMatrix4(centralSun.matrixWorld);
+      label.position.copy(worldPosition);
+      label.lookAt(camera.position);
+    }
   }
 
-  // 球體圍繞太陽運行（明顯的 3D 軌道）
+  // 球體圍繞地球運行（360度軌道公轉）
   spheres.forEach((sphere) => {
-    const { radius, initialAngle, orbitSpeed: speed } = sphere.userData
-    const currentAngle = initialAngle + t * speed * orbitSpeed
-    
-    // 3D 橢圓軌道
-    sphere.position.x = Math.cos(currentAngle) * radius
-    sphere.position.y = Math.sin(currentAngle) * radius * 0.5
-    sphere.position.z = Math.sin(currentAngle * 0.7) * 1.5 // 更明顯的 3D 深度
-    
-    // 球體自轉
-    sphere.rotation.x += 0.01
-    sphere.rotation.y += 0.01
-    
-    // 讓球體始終面向太陽
-    sphere.lookAt(0, 0, 0)
-  })
-  
-  // 更新 OrbitControls
-  if (controls) {
-    controls.update()
+    const { radius, initialAngle, orbitSpeed: speed } = sphere.userData;
+    const currentAngle = initialAngle + t * speed * ORBIT_SPEED;
+
+    // 圍繞地球的 360 度圓形軌道（3D 效果）
+    sphere.position.x = Math.cos(currentAngle) * radius;
+    sphere.position.y = Math.sin(currentAngle) * radius * 0.5; // 稍微橢圓
+    sphere.position.z = Math.sin(currentAngle * 0.7) * 1.5; // 3D 深度，讓軌道更立體
+
+    // 球體自轉（同時進行自轉）
+    sphere.rotation.y += dt * 0.08; // 自轉速度
+
+    // 大氣層和 rim light 跟隨球體旋轉（稍微不同步）
+    if (sphere.userData.atmosphere) {
+      sphere.userData.atmosphere.rotation.y = sphere.rotation.y * 1.02;
+    }
+    if (sphere.userData.rim) {
+      sphere.userData.rim.rotation.y = sphere.rotation.y * 1.02;
+    }
+
+    // 更新標籤位置，讓它跟隨星球
+    if (sphere.userData.label && camera) {
+      const label = sphere.userData.label as CSS3DObject;
+      // 計算標籤在星球右側的位置
+      const sphereRadius = (sphere as THREE.Mesh).geometry
+        ? ((sphere as THREE.Mesh).geometry as THREE.SphereGeometry).parameters
+            .radius
+        : 1;
+
+      // 計算從星球中心到標籤位置的向量（在星球本地座標系中），更貼近星球
+      const localOffset = new THREE.Vector3(sphereRadius + 0.5, 0, 0);
+
+      // 將本地偏移轉換為世界座標
+      const worldPosition = localOffset.clone();
+      worldPosition.applyMatrix4(sphere.matrixWorld);
+
+      // 設置標籤位置
+      label.position.copy(worldPosition);
+
+      // 讓標籤始終面向相機
+      label.lookAt(camera.position);
+    }
+  });
+
+  // 更新評價星球標籤位置
+  const reviewsSphere = spheres.find(
+    (s) => s.userData.planetId === PLANET_IDS.REVIEWS
+  );
+  if (reviewsSphere && reviewsSphere.userData.label && camera) {
+    const label = reviewsSphere.userData.label as CSS3DObject;
+    const reviewsSphereRadius = (reviewsSphere as THREE.Mesh).geometry
+      ? ((reviewsSphere as THREE.Mesh).geometry as THREE.SphereGeometry)
+          .parameters.radius
+      : 1.6;
+    const localOffset = new THREE.Vector3(reviewsSphereRadius + 0.5, 0, 0);
+    const worldPosition = localOffset.clone();
+    worldPosition.applyMatrix4(reviewsSphere.matrixWorld);
+    label.position.copy(worldPosition);
+    label.lookAt(camera.position);
   }
 
-  // Hover detection
+  // 更新聯絡星球標籤位置
+  const contactSphere = spheres.find(
+    (s) => s.userData.planetId === PLANET_IDS.CONTACT
+  );
+  if (contactSphere && contactSphere.userData.label && camera) {
+    const label = contactSphere.userData.label as CSS3DObject;
+    const contactSphereRadius = (contactSphere as THREE.Mesh).geometry
+      ? ((contactSphere as THREE.Mesh).geometry as THREE.SphereGeometry)
+          .parameters.radius
+      : 1.9;
+    const localOffset = new THREE.Vector3(contactSphereRadius + 0.5, 0, 0);
+    const worldPosition = localOffset.clone();
+    worldPosition.applyMatrix4(contactSphere.matrixWorld);
+    label.position.copy(worldPosition);
+    label.lookAt(camera.position);
+  }
+
+  // 步驟6：相機跟隨（在動畫循環中持續跟隨）
+  if (activeSphere && camera && renderer) {
+    // 禁用 OrbitControls 當有選中的球時
+    if (controls) {
+      controls.enabled = false;
+    }
+
+    // 計算相機目標位置（在球的前方）
+    const spherePosition = activeSphere.position.clone();
+    const cameraDistance = 8;
+
+    // 地球在中心，相機位置稍微不同
+    let targetPos: THREE.Vector3;
+    if (activeSphere.userData.isEarth) {
+      // 地球在中心，相機在正前方
+      targetPos = new THREE.Vector3(0, 0, cameraDistance);
+    } else {
+      // 其他行星，相機在球的前方
+      targetPos = new THREE.Vector3(
+        spherePosition.x,
+        spherePosition.y,
+        spherePosition.z + cameraDistance
+      );
+    }
+
+    // 平滑跟隨
+    camera.position.lerp(targetPos, 0.05);
+    camera.lookAt(activeSphere.position);
+
+    // 計算球的螢幕座標（用於定位資訊面板）
+    const vector = spherePosition.clone().project(camera);
+    const rect = renderer.domElement.getBoundingClientRect();
+    const width = rect.width || window.innerWidth;
+    const height = rect.height || window.innerHeight;
+    const widthHalf = width / 2;
+    const heightHalf = height / 2;
+
+    // 計算目標位置
+    const targetX = vector.x * widthHalf + widthHalf;
+    const targetY = -(vector.y * heightHalf) + heightHalf;
+
+    // 平滑插值，減少抖動
+    smoothedPanelPosition.value = {
+      x:
+        smoothedPanelPosition.value.x +
+        (targetX - smoothedPanelPosition.value.x) * 0.15,
+      y:
+        smoothedPanelPosition.value.y +
+        (targetY - smoothedPanelPosition.value.y) * 0.15,
+    };
+
+    panelPosition.value = smoothedPanelPosition.value;
+  } else {
+    // 沒有選中球時，啟用 OrbitControls
+    if (controls) {
+      controls.enabled = true;
+      controls.update();
+    }
+    // 隱藏面板位置
+    panelPosition.value = { x: 0, y: 0 };
+    smoothedPanelPosition.value = { x: 0, y: 0 };
+  }
+
+  // Hover detection（包含地球和其他行星）
   if (raycaster && camera) {
-    raycaster.setFromCamera(mouse, camera)
-    const intersects = raycaster.intersectObjects(spheres)
-    
-    let hasHover = false
-    spheres.forEach((sphere) => {
-      const isHovered = intersects.some(i => i.object === sphere)
-      if (isHovered) {
-        hasHover = true
-        gsap.to(sphere.scale, { x: 1.3, y: 1.3, z: 1.3, duration: 0.3 })
-        if (renderer) {
-          renderer.domElement.style.cursor = 'pointer'
-        }
-      } else {
-        gsap.to(sphere.scale, { x: 1, y: 1, z: 1, duration: 0.3 })
+    raycaster.setFromCamera(mouse, camera);
+
+    // 檢測所有可點擊的物體（包括地球和子物體）
+    const allHoverObjects: THREE.Object3D[] = [];
+    if (centralSun) {
+      allHoverObjects.push(centralSun);
+      if (centralSun.children) {
+        allHoverObjects.push(...centralSun.children);
       }
-    })
-    
+    }
+    spheres.forEach((sphere) => {
+      allHoverObjects.push(sphere);
+      if (sphere.children) {
+        allHoverObjects.push(...sphere.children);
+      }
+    });
+
+    const intersects = raycaster.intersectObjects(allHoverObjects, true);
+
+    // 找到被 hover 的球（可能是球本身或子物體）
+    let hoveredSphere: THREE.Mesh | null = null;
+    if (intersects.length > 0) {
+      let clickedObject = intersects[0].object;
+
+      // 如果點擊到的是球本身
+      if (clickedObject.userData && clickedObject.userData.item) {
+        hoveredSphere = clickedObject as THREE.Mesh;
+      } else {
+        // 如果點擊到的是子物體，找到父球體
+        let parent = clickedObject.parent;
+        while (parent) {
+          if (parent.userData && parent.userData.item) {
+            hoveredSphere = parent as THREE.Mesh;
+            break;
+          }
+          parent = parent.parent;
+        }
+      }
+    }
+
+    // 處理所有球的 hover 效果
+    const allSpheres: THREE.Mesh[] = [];
+    if (centralSun) allSpheres.push(centralSun);
+    allSpheres.push(...spheres);
+
+    let hasHover = false;
+    allSpheres.forEach((sphere) => {
+      const isHovered = hoveredSphere === sphere;
+      const isActive = activeSphere === sphere;
+
+      if (isHovered) {
+        hasHover = true;
+        // 只改變 cursor，不放大球
+        if (renderer) {
+          renderer.domElement.style.cursor = "pointer";
+        }
+        // 如果這個球不是 active 狀態，可以添加其他 hover 效果（但不放大）
+        // 例如：可以改變材質的 emissive 或其他視覺效果
+      }
+
+      // 只有當球不是 active 狀態時，才恢復正常大小（避免干擾 active 效果）
+      if (!isActive && !isHovered) {
+        // 如果球沒有被選中且沒有被 hover，確保它是正常大小
+        // 但這裡不應該強制設置，因為 active 球應該保持放大狀態
+      }
+    });
+
     if (!hasHover && renderer) {
-      renderer.domElement.style.cursor = 'default'
+      renderer.domElement.style.cursor = "default";
     }
   }
 
   if (renderer && scene && camera) {
-    renderer.render(scene, camera)
+    renderer.render(scene, camera);
   }
-}
+
+  // 渲染 CSS3D 標籤
+  if (css3dRenderer && css3dScene && camera) {
+    css3dRenderer.render(css3dScene, camera);
+  }
+};
 
 onMounted(() => {
-  if (typeof window === 'undefined' || !containerRef.value) return
+  // 添加點擊外部關閉語言下拉選單的監聽器
+  document.addEventListener("click", handleClickOutside);
 
-  const width = containerRef.value.clientWidth || window.innerWidth
-  const height = containerRef.value.clientHeight || window.innerHeight
+  if (typeof window === "undefined" || !containerRef.value) return;
+
+  const width = containerRef.value.clientWidth || window.innerWidth;
+  const height = containerRef.value.clientHeight || window.innerHeight;
 
   // Scene - 深色星空背景
-  scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x0a0a0f) // 深藍黑色，像真實夜空
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0f); // 深藍黑色，像真實夜空
+
+  // CSS3D Scene
+  css3dScene = new THREE.Scene();
 
   // Camera
-  camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
-  camera.position.set(0, 0, 8)
+  camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+  camera.position.set(0, 0, 8);
 
-  // Renderer
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-  renderer.setSize(width, height)
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-  renderer.domElement.style.display = 'block'
-  renderer.domElement.style.width = '100%'
-  renderer.domElement.style.height = '100%'
-  containerRef.value.appendChild(renderer.domElement)
+  // Renderer - 啟用更好的渲染效果
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    powerPreference: "high-performance",
+  });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; // 更好的色調映射
+  renderer.toneMappingExposure = 1.2; // 稍微增強曝光
+  renderer.domElement.style.display = "block";
+  renderer.domElement.style.width = "100%";
+  renderer.domElement.style.height = "100%";
+  containerRef.value.appendChild(renderer.domElement);
 
-  // Lights - 更柔和的光照
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.3) // 稍微減弱環境光
-  scene.add(ambientLight)
+  // CSS3D Renderer
+  css3dRenderer = new CSS3DRenderer();
+  css3dRenderer.setSize(width, height);
+  css3dRenderer.domElement.style.position = "absolute";
+  css3dRenderer.domElement.style.top = "0";
+  css3dRenderer.domElement.style.left = "0";
+  css3dRenderer.domElement.style.pointerEvents = "none";
+  containerRef.value.appendChild(css3dRenderer.domElement);
 
-  const pointLight1 = new THREE.PointLight(0x00ff88, 0.5, 50) // 減弱強度
-  pointLight1.position.set(5, 5, 5)
-  scene.add(pointLight1)
+  // Lights - 為地球設置光照
+  // 主定向光源（模擬太陽光）
+  dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+  dirLight.position.set(0, 0, 3); // 從側面照射，模擬太陽
+  scene.add(dirLight);
 
-  const pointLight2 = new THREE.PointLight(0x00ccff, 0.5, 50) // 減弱強度
-  pointLight2.position.set(-5, -5, 5)
-  scene.add(pointLight2)
-  
-  // 添加一個柔和的頂部光源
-  const topLight = new THREE.DirectionalLight(0xffffff, 0.2)
-  topLight.position.set(0, 10, 0)
-  scene.add(topLight)
+  // 環境光（較暗，讓晝夜對比更明顯）
+  scene.add(new THREE.AmbientLight(0x888888, 0.2));
 
   // 創建星空背景
-  starfield = createStarfield()
-  scene.add(starfield)
-  
-  // 創建中央太陽
-  centralSun = createCentralSun()
-  
-  // 創建互動球體（圍繞太陽運行）
-  spheres = createInteractiveSpheres()
-  
-  // 設置相機初始位置
-  camera.position.set(8, 4, 8)
-  camera.lookAt(0, 0, 0)
+  starfield = createStarfield();
+  scene.add(starfield);
 
-  // OrbitControls - 360度旋轉控制
-  controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true
-  controls.dampingFactor = 0.05
-  controls.minDistance = 5
-  controls.maxDistance = 30
-  controls.enablePan = false // 禁用平移，只允許旋轉和縮放
-  controls.autoRotate = false // 關閉自動旋轉，讓用戶手動控制
+  // 創建真實的中央地球
+  centralSun = createCentralSun();
+
+  // 為中央地球創建標籤
+  if (centralSun) {
+    const earthLabelText =
+      navItems.value.find((nav) => nav.id === PLANET_IDS.EARTH)?.label ||
+      "關於我";
+    const earthLabelElement = document.createElement("div");
+    earthLabelElement.className = "planet-label";
+    earthLabelElement.textContent = earthLabelText;
+    earthLabelElement.style.cssText = `
+      color: white;
+      font-size: 40px;
+      font-weight: 600;
+      text-align: center;
+      white-space: nowrap;
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+      user-select: none;
+      padding: 6px 12px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 8px;
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    `;
+    const earthLabel = new CSS3DObject(earthLabelElement);
+    earthLabel.scale.set(0.01, 0.01, 0.01);
+    earthLabel.position.set(1.7, 0, 0);
+    centralSun.userData.label = earthLabel;
+    planetLabels.push(earthLabel);
+    css3dScene.add(earthLabel);
+  }
+
+  // 更新地球 shader 的太陽方向
+  if (centralSun) {
+    const earthMaterial = centralSun.material as THREE.ShaderMaterial;
+    if (
+      earthMaterial &&
+      earthMaterial.uniforms &&
+      earthMaterial.uniforms.sunDirection
+    ) {
+      earthMaterial.uniforms.sunDirection.value
+        .copy(dirLight.position)
+        .normalize();
+    }
+    const atmosphereMesh = centralSun.children[0] as THREE.Mesh;
+    if (atmosphereMesh) {
+      const atmosphereMaterial =
+        atmosphereMesh.material as THREE.ShaderMaterial;
+      if (
+        atmosphereMaterial &&
+        atmosphereMaterial.uniforms &&
+        atmosphereMaterial.uniforms.sunDirection
+      ) {
+        atmosphereMaterial.uniforms.sunDirection.value
+          .copy(dirLight.position)
+          .normalize();
+      }
+    }
+  }
+
+  // 創建互動球體（圍繞地球運行）
+  spheres = createInteractiveSpheres();
+
+  // 為評價創建額外的球體
+  const reviewsPlanetType = "venus";
+  const reviewsBaseColor = 0x90ee90; // 改為淡綠色，與聯絡資訊的紫色區別更明顯
+  const reviewsBaseSize = 0.8;
+  const reviewsSphereRadius = reviewsBaseSize * 1.6;
+
+  const reviewsGeometry = new THREE.SphereGeometry(
+    reviewsSphereRadius,
+    128,
+    128
+  );
+  // 為評價星球創建專屬的淡綠色紋理
+  const reviewsTexture = createPlanetTextureWithColor("venus", 1024, reviewsBaseColor);
+  const reviewsNormalMap = createNormalMap(1024);
+  const reviewsBumpMap = createBumpMap(1024);
+
+  const reviewsMaterial = new THREE.MeshStandardMaterial({
+    map: reviewsTexture,
+    normalMap: reviewsNormalMap,
+    bumpMap: reviewsBumpMap,
+    bumpScale: 0.03,
+    metalness: 0.0,
+    roughness: 1.0,
+  });
+
+  const reviewsSphere = new THREE.Mesh(
+    reviewsGeometry,
+    reviewsMaterial
+  ) as SphereMesh;
+  reviewsSphere.rotation.z = THREE.MathUtils.degToRad(45);
+
+  // 添加大氣層光暈
+  const reviewsAtmosphere = createAtmosphereGlow(
+    reviewsBaseColor,
+    reviewsSphereRadius
+  );
+  reviewsSphere.add(reviewsAtmosphere);
+
+  // 添加 Rim Light 效果
+  const reviewsRim = createRimLight(reviewsBaseColor, reviewsSphereRadius);
+  reviewsSphere.add(reviewsRim);
+
+  // 計算位置（第 5 個球體）
+  const reviewsIndex = 4;
+  const reviewsRadius = 5 + reviewsIndex * 2;
+  const reviewsAngle = (reviewsIndex / 6) * Math.PI * 2; // 6 個球體
+
+  reviewsSphere.position.x = Math.cos(reviewsAngle) * reviewsRadius;
+  reviewsSphere.position.y = Math.sin(reviewsAngle) * reviewsRadius * 0.5;
+  reviewsSphere.position.z = Math.sin(reviewsAngle * 0.7) * 0.5;
+
+  const reviewsDirection = reviewsIndex % 2 === 0 ? 1 : -1;
+  const reviewsSpeed = (0.1 + reviewsIndex * 0.05) * reviewsDirection;
+
+  reviewsSphere.userData = {
+    item: { id: "reviews", label: "Reviews", path: "/reviews" },
+    index: reviewsIndex,
+    radius: reviewsRadius,
+    initialAngle: reviewsAngle,
+    orbitSpeed: reviewsSpeed,
+    planetId: PLANET_IDS.REVIEWS,
+    atmosphere: reviewsAtmosphere,
+    rim: reviewsRim,
+  };
+
+  spheres.push(reviewsSphere);
+  scene.add(reviewsSphere);
+
+  // 為評價星球創建標籤
+  const reviewsLabelText =
+    navItems.value.find((nav) => nav.id === PLANET_IDS.REVIEWS)?.label ||
+    "主管＆同事評價";
+  const reviewsLabelElement = document.createElement("div");
+  reviewsLabelElement.className = "planet-label";
+  reviewsLabelElement.textContent = reviewsLabelText;
+  reviewsLabelElement.style.cssText = `
+    color: white;
+    font-size: 40px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    user-select: none;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  `;
+  const reviewsLabel = new CSS3DObject(reviewsLabelElement);
+  reviewsLabel.scale.set(0.01, 0.01, 0.01);
+  reviewsLabel.position.set(reviewsSphereRadius + 0.5, 0, 0);
+  reviewsSphere.userData.label = reviewsLabel;
+  planetLabels.push(reviewsLabel);
+  css3dScene.add(reviewsLabel);
+
+  // 為聯絡資訊創建額外的球體
+  const contactPlanetType = "venus";
+  const contactBaseColor = 0x9b59b6; // 保持紫色
+  const contactBaseSize = 0.8;
+  const contactSphereRadius = contactBaseSize * 1.9; // 金星大小
+
+  const contactGeometry = new THREE.SphereGeometry(
+    contactSphereRadius,
+    128,
+    128
+  );
+  const contactTexture = createPlanetTexture(contactPlanetType, 1024);
+  const contactNormalMap = createNormalMap(1024);
+  const contactBumpMap = createBumpMap(1024);
+
+  const contactMaterial = new THREE.MeshStandardMaterial({
+    map: contactTexture,
+    normalMap: contactNormalMap,
+    bumpMap: contactBumpMap,
+    bumpScale: 0.03,
+    metalness: 0.0,
+    roughness: 1.0,
+  });
+
+  const contactSphere = new THREE.Mesh(
+    contactGeometry,
+    contactMaterial
+  ) as SphereMesh;
+  contactSphere.rotation.z = THREE.MathUtils.degToRad(60);
+
+  // 添加大氣層光暈
+  const contactAtmosphere = createAtmosphereGlow(
+    contactBaseColor,
+    contactSphereRadius
+  );
+  contactSphere.add(contactAtmosphere);
+
+  // 添加 Rim Light 效果
+  const contactRim = createRimLight(contactBaseColor, contactSphereRadius);
+  contactSphere.add(contactRim);
+
+  // 計算位置（第 6 個球體，最後一個）
+  const contactIndex = 5;
+  const contactRadius = 5 + contactIndex * 2;
+  const contactAngle = (contactIndex / 6) * Math.PI * 2; // 6 個球體
+
+  contactSphere.position.x = Math.cos(contactAngle) * contactRadius;
+  contactSphere.position.y = Math.sin(contactAngle) * contactRadius * 0.5;
+  contactSphere.position.z = Math.sin(contactAngle * 0.7) * 0.5;
+
+  const contactDirection = contactIndex % 2 === 0 ? 1 : -1;
+  const contactSpeed = (0.1 + contactIndex * 0.05) * contactDirection;
+
+  contactSphere.userData = {
+    item: { id: "contact", label: "Contact", path: "/contact" },
+    index: contactIndex,
+    radius: contactRadius,
+    initialAngle: contactAngle,
+    orbitSpeed: contactSpeed,
+    planetId: PLANET_IDS.CONTACT, // 設置為 contact 的唯一標識
+    atmosphere: contactAtmosphere,
+    rim: contactRim,
+  };
+
+  spheres.push(contactSphere);
+  scene.add(contactSphere);
+
+  // 為聯絡星球創建標籤
+  const contactLabelText =
+    navItems.value.find((nav) => nav.id === PLANET_IDS.CONTACT)?.label ||
+    "聯絡資訊";
+  const contactLabelElement = document.createElement("div");
+  contactLabelElement.className = "planet-label";
+  contactLabelElement.textContent = contactLabelText;
+  contactLabelElement.style.cssText = `
+    color: white;
+    font-size: 40px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    user-select: none;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  `;
+  const contactLabel = new CSS3DObject(contactLabelElement);
+  contactLabel.scale.set(0.01, 0.01, 0.01);
+  contactLabel.position.set(contactSphereRadius + 0.5, 0, 0);
+  contactSphere.userData.label = contactLabel;
+  planetLabels.push(contactLabel);
+  css3dScene.add(contactLabel);
+
+  // 設置相機初始位置
+  camera.position.set(8, 4, 8);
+  camera.lookAt(0, 0, 0);
+
+  // OrbitControls - 360度旋轉控制（確保 3D 旋轉效果正常）
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 5;
+  controls.maxDistance = 30;
+  controls.enablePan = false; // 禁用平移，只允許旋轉和縮放
+  controls.autoRotate = false; // 關閉自動旋轉，讓用戶手動控制
 
   // Raycaster
-  raycaster = new THREE.Raycaster()
+  raycaster = new THREE.Raycaster();
 
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('click', onClick)
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("click", onClick);
 
-  const handleResize = () => {
-    if (!containerRef.value || !renderer || !camera) return
-    const w = containerRef.value.clientWidth || window.innerWidth
-    const h = containerRef.value.clientHeight || window.innerHeight
-    camera.aspect = w / h
-    camera.updateProjectionMatrix()
-    renderer.setSize(w, h)
-  }
-  window.addEventListener('resize', handleResize)
-  
+  const handleResize = (): void => {
+    if (!containerRef.value || !renderer || !camera) return;
+    const w = containerRef.value.clientWidth || window.innerWidth;
+    const h = containerRef.value.clientHeight || window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+
+    // 更新 CSS3DRenderer 大小
+    if (css3dRenderer) {
+      css3dRenderer.setSize(w, h);
+    }
+  };
+  window.addEventListener("resize", handleResize);
+
   // 確保初始化完成後再開始動畫
   setTimeout(() => {
-    handleResize()
+    handleResize();
     // 立即渲染一次
     if (renderer && scene && camera) {
-      renderer.render(scene, camera)
+      renderer.render(scene, camera);
     }
     // 啟動動畫循環
     if (animationId === null) {
-      animate()
+      animate();
     }
-  }, 100)
-})
+
+    // 觸發 ready 事件，通知父組件組件已準備好
+    emit("ready");
+
+    // 如果設置了自動打開地球，則打開地球
+    if (props.autoOpenEarth) {
+      setTimeout(() => {
+        navigateToPlanet(PLANET_IDS.EARTH);
+      }, 500); // 稍微延遲，確保場景已完全初始化
+    }
+  }, 100);
+});
 
 onUnmounted(() => {
+  // 移除點擊外部關閉語言下拉選單的監聽器
+  document.removeEventListener("click", handleClickOutside);
+
   if (animationId !== null) {
-    cancelAnimationFrame(animationId)
+    cancelAnimationFrame(animationId);
   }
   if (controls) {
-    controls.dispose()
+    controls.dispose();
   }
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('click', onClick)
+  window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("click", onClick);
   if (containerRef.value && containerRef.value.firstChild) {
-    containerRef.value.removeChild(containerRef.value.firstChild)
+    containerRef.value.removeChild(containerRef.value.firstChild);
   }
-})
+});
+
+// Watch
+watch(
+  () => locale.value,
+  (newLocale) => {
+    // 確保面板保持開啟：如果當前有選中的內容，更新它
+    if (selectedContent.value) {
+      // 保存當前的 planetId
+      const currentPlanetId = selectedContent.value.id;
+
+      // 獲取新語言的內容
+      const content = getPlanetContent(currentPlanetId, newLocale);
+      if (content) {
+        // 更新內容，但保持面板開啟（selectedContent 不為 null）
+        selectedContent.value = content;
+      }
+      // 如果獲取失敗，保持當前內容但保持面板開啟（不設置 selectedContent.value = null）
+    }
+
+    // 更新所有星球標籤的文字
+    // 更新軌道星球的標籤
+    spheres.forEach((sphere) => {
+      if (sphere.userData.label && sphere.userData.planetId) {
+        const label = sphere.userData.label as CSS3DObject;
+        const planetId = sphere.userData.planetId;
+        const newLabelText =
+          navItems.value.find((nav) => nav.id === planetId)?.label ||
+          sphere.userData.item?.label ||
+          "";
+        if (label.element && newLabelText) {
+          label.element.textContent = newLabelText;
+        }
+      }
+    });
+
+    // 更新中央地球的標籤
+    if (centralSun && centralSun.userData.label) {
+      const label = centralSun.userData.label as CSS3DObject;
+      const newLabelText =
+        navItems.value.find((nav) => nav.id === PLANET_IDS.EARTH)?.label ||
+        "關於我";
+      if (label.element && newLabelText) {
+        label.element.textContent = newLabelText;
+      }
+    }
+
+    // 更新評價星球的標籤
+    const reviewsSphere = spheres.find(
+      (s) => s.userData.planetId === PLANET_IDS.REVIEWS
+    );
+    if (reviewsSphere && reviewsSphere.userData.label) {
+      const label = reviewsSphere.userData.label as CSS3DObject;
+      const newLabelText =
+        navItems.value.find((nav) => nav.id === PLANET_IDS.REVIEWS)?.label ||
+        "主管＆同事評價";
+      if (label.element && newLabelText) {
+        label.element.textContent = newLabelText;
+      }
+    }
+
+    // 更新聯絡星球的標籤
+    const contactSphere = spheres.find(
+      (s) => s.userData.planetId === PLANET_IDS.CONTACT
+    );
+    if (contactSphere && contactSphere.userData.label) {
+      const label = contactSphere.userData.label as CSS3DObject;
+      const newLabelText =
+        navItems.value.find((nav) => nav.id === PLANET_IDS.CONTACT)?.label ||
+        "聯絡資訊";
+      if (label.element && newLabelText) {
+        label.element.textContent = newLabelText;
+      }
+    }
+  }
+);
+
+// 監聽窗口大小變化，更新渲染器大小和標籤位置
+watch([() => deviceWidth.value, () => deviceHeight.value], () => {
+  if (!containerRef.value || !renderer || !camera) return;
+  const w = containerRef.value.clientWidth || window.innerWidth;
+  const h = containerRef.value.clientHeight || window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+
+  // 更新 CSS3DRenderer 大小
+  if (css3dRenderer) {
+    css3dRenderer.setSize(w, h);
+  }
+});
 </script>
 
 <template>
-  <div ref="containerRef" class="w-full h-full fixed inset-0" style="min-height: 100vh;">
+  <div
+    ref="containerRef"
+    class="w-full h-full fixed inset-0"
+    style="min-height: 100vh">
+    <!-- 手機版提醒 -->
+    <MobileWarning />
+
+    <!-- 右上角控制區 -->
+    <div
+      class="fixed z-50 flex flex-col gap-3 right-[6px]"
+      :class="isMobile ? 'top-[3rem]' : 'top-6'">
+      <!-- 語言下拉選單 -->
+      <div ref="languageDropdownRef" class="relative">
+        <button
+          @click="showLanguageDropdown = !showLanguageDropdown"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 transition-all duration-200 text-white text-sm font-medium shadow-lg w-full">
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+          </svg>
+          <span>{{ t.landing.language }}</span>
+          <span class="text-xs opacity-70 ml-auto">{{
+            locale === "zh" ? "中文" : "English"
+          }}</span>
+          <svg
+            class="w-4 h-4 transition-transform duration-200"
+            :class="{ 'rotate-180': showLanguageDropdown }"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <!-- 下拉選單 -->
+        <Transition
+          enter-active-class="transition ease-out duration-100"
+          enter-from-class="transform opacity-0 scale-95"
+          enter-to-class="transform opacity-100 scale-100"
+          leave-active-class="transition ease-in duration-75"
+          leave-from-class="transform opacity-100 scale-100"
+          leave-to-class="transform opacity-0 scale-95">
+          <div
+            v-if="showLanguageDropdown"
+            class="absolute top-full left-0 mt-2 w-full bg-white/10 backdrop-blur-md rounded-lg border border-white/20 shadow-lg overflow-hidden z-50">
+            <button
+              @click.stop="
+                setLocale('zh');
+                showLanguageDropdown = false;
+              "
+              :class="[
+                'w-full px-4 py-2 text-sm text-left transition-all duration-200',
+                locale === 'zh'
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/70 hover:bg-white/10 hover:text-white',
+              ]">
+              中文
+            </button>
+            <button
+              @click.stop="
+                setLocale('en');
+                showLanguageDropdown = false;
+              "
+              :class="[
+                'w-full px-4 py-2 text-sm text-left transition-all duration-200',
+                locale === 'en'
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/70 hover:bg-white/10 hover:text-white',
+              ]">
+              English
+            </button>
+          </div>
+        </Transition>
+      </div>
+
+      <!-- 導航選單 -->
+      <div ref="navDropdownRef" class="relative">
+        <button
+          @click="showNavDropdown = !showNavDropdown"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 transition-all duration-200 text-white text-sm font-medium shadow-lg w-full">
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <span>{{ t.nav.navigation }}</span>
+          <svg
+            class="w-4 h-4 transition-transform duration-200 ml-auto"
+            :class="{ 'rotate-180': showNavDropdown }"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <!-- 下拉選單 -->
+        <Transition
+          enter-active-class="transition ease-out duration-100"
+          enter-from-class="transform opacity-0 scale-95"
+          enter-to-class="transform opacity-100 scale-100"
+          leave-active-class="transition ease-in duration-75"
+          leave-from-class="transform opacity-100 scale-100"
+          leave-to-class="transform opacity-0 scale-95">
+          <nav
+            v-if="showNavDropdown"
+            class="absolute top-full left-0 mt-2 w-full bg-white/10 backdrop-blur-md rounded-lg border border-white/20 shadow-lg overflow-hidden z-50 min-w-[160px]">
+            <ul class="flex flex-col">
+              <li v-for="item in navItems" :key="item.id">
+                <button
+                  @click.stop="
+                    navigateToPlanet(item.id);
+                    showNavDropdown = false;
+                  "
+                  :class="[
+                    'w-full px-4 py-2 text-sm text-left transition-all duration-200',
+                    selectedContent?.id === item.id
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
+                  ]"
+                  :style="{
+                    color:
+                      selectedContent?.id === item.id
+                        ? selectedContent?.color || '#fff'
+                        : undefined,
+                  }">
+                  {{ item.label }}
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </Transition>
+      </div>
+    </div>
+
+    <!-- 資訊面板 -->
+    <PlanetInfoPanel
+      :content="selectedContent"
+      :visible="isPanelVisible"
+      :position="panelPosition"
+      @close="handlePanelClose"
+      @prev="switchPlanet('prev')"
+      @next="switchPlanet('next')"
+      @navigate-to="navigateToPlanet" />
   </div>
 </template>
 
 <style scoped>
 div > canvas {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
+  display: block;
+  width: 100%;
+  height: 100%;
   position: absolute;
   top: 0;
   left: 0;
 }
 </style>
-
