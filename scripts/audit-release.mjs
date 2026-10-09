@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 const files=[];
 async function walk(dir){for(const entry of await readdir(dir,{withFileTypes:true})){const file=path.join(dir,entry.name);if(entry.isSymbolicLink())throw new Error('Symlink in release');if(entry.isDirectory())await walk(file);else files.push(file);}}
-await walk('dist');
+await walk(process.argv[2] || '.output');
 const forbidden=/(?:^|[\\/])(?:editorial|private|\.env(?:\..*)?|\.git|verification[^\\/]*)(?:[\\/]|$)|\.(?:pdf|pem|key|map)$/i;
 for(const file of files){
  if(forbidden.test(file))throw new Error('Private or unsupported release file: '+file);

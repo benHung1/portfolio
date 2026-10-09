@@ -26,17 +26,26 @@ npm run verify
 ## 建置
 
 ```sh
-# Sites / Cloudflare Worker：dist/server/index.js 與 dist/client
-npm run build
-
 # 一般 Node.js SSR：.output/server/index.mjs
-npm run build:local
+npm run build
 node .output/server/index.mjs
 ```
 
 網站使用 SSR，透過 `bh-language` cookie 輸出正確語系；HTML 回應為 private / no-cache。請使用支援 SSR 的執行環境，不直接以靜態匯出替換。
 
-`.openai/hosting.json` 保存 Sites 站點識別，不包含憑證。部署 token 只在受支援的發布流程中暫時使用，不寫入專案。
+## Vercel 部署
+
+原始碼放在 GitHub，正式網站由 Vercel 執行。將此儲存庫的新版發布分支匯入 Vercel，Framework Preset 使用 Nuxt，Root Directory 使用儲存庫根目錄，Build Command 使用 `npm run build`。請保留預設 Output Directory，讓 Nitro 產生 SSR Functions 與靜態資產。
+
+`vercel.json` 已宣告 Nuxt 框架與建置指令；`.vercelignore` 排除內部文件及本機產物。此網站不需要應用程式密鑰或付費服務才能建置。帳號 token 與 `.vercel` 連線資料不納入 Git。
+
+可在不登入、不發布的情況下檢查 Vercel 產物（PowerShell）：
+
+```powershell
+$env:NITRO_PRESET='vercel'
+npm run build
+# 產物位於 .vercel/output
+```
 
 ## 內容與互動
 

@@ -1,14 +1,17 @@
 import { env } from 'node:process';
-const sitesBuild = env.PORTFOLIO_SITES_BUILD === '1';
 
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-09',
   buildDir: env.PORTFOLIO_BUILD_DIR || '.nuxt-local',
   nitro: {
-    preset: sitesBuild ? 'cloudflare-module' : undefined,
-    output: sitesBuild ? { dir: 'dist', publicDir: 'dist/client', serverDir: 'dist/server' } : { dir: env.PORTFOLIO_OUTPUT_DIR || '.output' },
-    cloudflare: sitesBuild ? { nodeCompat: true, deployConfig: false } : undefined,
-    rollupConfig: sitesBuild ? { output: { entryFileNames: 'index.js' } } : undefined,
+    // Serve the portfolio through one SSR function. Later Vercel compatibility
+    // creates per-route junction aliases, which require extra Windows privileges.
+    compatibilityDate: { vercel: '2025-07-14' },
+    // Vercel selects its SSR preset and output structure automatically.
+    // Keep an optional output override for isolated local production previews.
+    output: env.PORTFOLIO_OUTPUT_DIR
+      ? { dir: env.PORTFOLIO_OUTPUT_DIR }
+      : undefined,
   },
   sourcemap: { server: false, client: false },
   devtools: { enabled: false },

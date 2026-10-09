@@ -72,21 +72,6 @@ html[data-intro='play'] .brand-intro {
   letter-spacing: 0.2em;
   text-align: center;
 }
-.intro-skip {
-  position: absolute;
-  bottom: 35px;
-  right: 4vw;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  padding: 13px 20px;
-  min-height: 44px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
 @keyframes brand-letter {
   from {
     transform: translateY(90px) rotate(-12deg);
